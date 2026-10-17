@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Интерактивная внешняя модель хозблока и навеса",
+  "description": "Интерактивная модель хозблока с интерьером, навесом и заездом автомобиля",
   "scripts": {
     "start": "node server.mjs",
     "build": "node scripts/build.mjs",

@@ -3,6 +3,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { SITE, DIMENSIONS, createModel, createCar, createSite, setEntranceOpen, updateRoofLoad, setRoofBoxOpening, setCarPose, collisionBoxes } from './model.js';
 import { buildManeuver, sampleManeuver, analyzeManeuver, createAccessRoutes, CANOPY_CLEARANCE, SOFFIT_CLEARANCE, OPENING_RESERVE } from './driving.js';
+import { INTERIOR, INSIDE_VIEWS, createInterior, moveInside } from './interior.js';
+
+let insideMode = false, planMode = false;
+let walker = { ...INSIDE_VIEWS.passage };
+const heldKeys = new Set();
+let walkTick = 0, drag = null;
 
 const host = document.getElementById('scene');
 const labelsLayer = document.getElementById('dimension-labels');
@@ -38,7 +44,8 @@ scene.environment = environment.texture;
 scene.environmentIntensity = 0.3;
 room.dispose();
 pmrem.dispose();
-scene.add(new THREE.HemisphereLight('#f7f6ee', '#788171', 1.9));
+const skyLight = new THREE.HemisphereLight('#f7f6ee', '#788171', 1.9);
+scene.add(skyLight);
 const sun = new THREE.DirectionalLight('#fff4dc', 3.2);
 sun.position.set(2, 13, -7);
 sun.target.position.set(3, 0, 5);
@@ -149,6 +156,51 @@ floor.position.y = -0.335;
 floor.receiveShadow = true;
 scene.add(floor);
 
+const pine = texture((ctx, size) => {
+  ctx.fillStyle = '#d9bf95';
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 900; i++) {
+    const y = random() * size;
+    ctx.strokeStyle = `rgba(111,77,37,${0.025 + random() * 0.085})`;
+    ctx.lineWidth = 0.4 + random();
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.bezierCurveTo(size * 0.3, y + random() * 5, size * 0.7, y - random() * 5, size, y + 2);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 12; i++) {
+    const x = random() * size, y = random() * size;
+    ctx.strokeStyle = '#97744832';
+    ctx.beginPath();ctx.ellipse(x, y, 9 + random() * 12, 2.5, 0, 0, Math.PI * 2);ctx.stroke();
+  }
+});
+const oakFloor = texture((ctx, size) => {
+  const rowHeight = size / 8;
+  for (let row = 0; row < 8; row++) {
+    for (let col = -1; col < 3; col++) {
+      const x = (col / 2 + (row % 2) / 4) * size, y = row * rowHeight;
+      const shade = Math.floor(random() * 20);
+      ctx.fillStyle = `rgb(${190 + shade},${180 + shade},${157 + shade})`;
+      ctx.fillRect(x, y, size / 2, rowHeight);
+      ctx.strokeStyle = '#8e847252';ctx.lineWidth = 1.4;
+      ctx.strokeRect(x + 0.5, y + 0.5, size / 2 - 1, rowHeight - 1);
+      for (let i = 0; i < 60; i++) {
+        const grainY = y + random() * rowHeight;
+        ctx.strokeStyle = random() > 0.5 ? '#ffffff18' : '#75624416';
+        ctx.beginPath();ctx.moveTo(x + 3, grainY);
+        ctx.bezierCurveTo(x + size / 6, grainY + 4, x + size / 3, grainY - 4, x + size / 2 - 3, grainY);ctx.stroke();
+      }
+    }
+  }
+}, 1024);
+const { interior, enclosure, ceiling } = createInterior({
+  wood: new THREE.MeshStandardMaterial({ map: pine, roughness: 0.82 }),
+  floor: new THREE.MeshStandardMaterial({ map: oakFloor, roughness: 0.87 }),
+  door: new THREE.MeshStandardMaterial({ map: pine, color: '#79634b', roughness: 0.84 }),
+});
+interior.visible = false;
+scene.add(interior);
+
 const car = createCar();
 scene.add(car);
 const accessRoutes = new THREE.Group();
@@ -175,7 +227,7 @@ function updatePlayback() {
   const finished = elapsed >= maxTime;
   const pose = sampleManeuver(poses, elapsed);
   setCarPose(car, pose);
-  car.visible = !hidden;
+  car.visible = !hidden && !insideMode;
   const parked = !hidden && !playing && pose.gear === 'P' && maxTime === analysis.duration;
   lidSelect.disabled = !parked || !boxToggle.checked || !!analysis.openingCollision || !mountInput.checkValidity();
   if (lidSelect.disabled && lidSelect.value !== 'closed') {
@@ -318,11 +370,19 @@ function requestRender() {
       updatePlayback();
       if (!playing) document.getElementById('view-status').textContent = maxTime < analysis.duration ? 'Автомобиль остановлен перед кровлей: бокс выше просвета.' : 'Манёвр завершён.';
     }
-    controls.update();
+    const walking = insideMode && !planMode && heldKeys.size > 0;
+    if (walking) {
+      const dt = walkTick ? Math.min((timestamp - walkTick) / 1000, 0.05) : 1 / 60;
+      walkTick = timestamp;
+      const forward = Number(heldKeys.has('KeyW') || heldKeys.has('ArrowUp')) - Number(heldKeys.has('KeyS') || heldKeys.has('ArrowDown'));
+      const right = Number(heldKeys.has('KeyD') || heldKeys.has('ArrowRight')) - Number(heldKeys.has('KeyA') || heldKeys.has('ArrowLeft'));
+      stepInside(forward, right, dt * 1.1);
+    } else walkTick = 0;
+    if (controls.enabled) controls.update();
     renderer.render(scene, camera);
     if (dimensions.visible) positionLabels(dimensionLabels);
     if (!accessLabelsLayer.hidden) positionLabels(accessLabels);
-    if (playing) requestRender();
+    if (playing || walking) requestRender();
   });
 }
 controls.addEventListener('change', requestRender);
@@ -380,6 +440,12 @@ document.querySelectorAll('[data-view]').forEach(button => {
 });
 
 function zoom(factor) {
+  if (insideMode && !planMode) {
+    camera.fov = THREE.MathUtils.clamp(camera.fov * factor, 35, 85);
+    camera.updateProjectionMatrix();
+    requestRender();
+    return;
+  }
   const offset = camera.position.clone().sub(controls.target);
   const distance = THREE.MathUtils.clamp(offset.length() * factor, controls.minDistance, controls.maxDistance);
   camera.position.copy(controls.target).add(offset.setLength(distance));
@@ -388,6 +454,12 @@ function zoom(factor) {
   requestRender();
 }
 function orbit(theta, phi = 0) {
+  if (insideMode && !planMode) {
+    walker.yaw += theta;
+    walker.pitch = THREE.MathUtils.clamp(walker.pitch - phi, -1.15, 1.15);
+    updateInsideCamera();
+    return;
+  }
   const spherical = new THREE.Spherical().setFromVector3(camera.position.clone().sub(controls.target));
   spherical.theta += theta;
   spherical.phi = THREE.MathUtils.clamp(spherical.phi + phi, controls.minPolarAngle, controls.maxPolarAngle);
@@ -402,7 +474,139 @@ document.getElementById('rotate-left').addEventListener('click', () => orbit(-Ma
 document.getElementById('rotate-right').addEventListener('click', () => orbit(Math.PI / 8));
 document.getElementById('tilt-up').addEventListener('click', () => orbit(0, -0.16));
 document.getElementById('tilt-down').addEventListener('click', () => orbit(0, 0.16));
-document.getElementById('reset').addEventListener('click', () => applyView('perspective'));
+document.getElementById('reset').addEventListener('click', () => insideMode ? applyInsideView('passage') : applyView('perspective'));
+
+function updateInsideCamera() {
+  camera.position.set(walker.x, INTERIOR.eye, walker.z);
+  camera.rotation.set(walker.pitch, -walker.yaw, 0, 'YXZ');
+  requestRender();
+}
+
+function stepInside(forward, right, distance = 0.32) {
+  if (!insideMode || planMode) return;
+  const length = Math.hypot(forward, right) || 1;
+  const dx = (Math.sin(walker.yaw) * forward + Math.cos(walker.yaw) * right) * distance / length;
+  const dz = (-Math.cos(walker.yaw) * forward + Math.sin(walker.yaw) * right) * distance / length;
+  Object.assign(walker, moveInside(walker, dx, dz));
+  updateInsideCamera();
+}
+
+function applyInsideView(name) {
+  heldKeys.clear();
+  walkTick = 0;
+  drag = null;
+  planMode = name === 'plan';
+  document.body.dataset.insideView = name;
+  ceiling.visible = !planMode;
+  enclosure.scale.y = planMode ? 0.24 : 1;
+  controls.enableDamping = false;
+  controls.update();
+  controls.reset();
+  controls.enabled = planMode;
+  controls.enableDamping = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  controls.minDistance = 4;
+  controls.maxDistance = 25;
+  controls.enablePan = planMode;
+  camera.near = 0.035;
+  camera.fov = planMode ? 42 : 65;
+  camera.updateProjectionMatrix();
+  if (planMode) {
+    controls.target.set(3, 0.65, 7.1);
+    const direction = new THREE.Vector3(0.45, 1, 0.65).normalize();
+    let distance = 10 / Math.min(camera.aspect, 1.35);
+    const corners = [];
+    for (const x of [0, 6]) for (const z of [5.1, 9.1]) for (const y of [0, 1.95]) corners.push(new THREE.Vector3(x, y, z));
+    for (let i = 0; i < 24; i++) {
+      camera.position.copy(controls.target).addScaledVector(direction, distance);
+      camera.lookAt(controls.target);
+      camera.updateMatrixWorld();
+      if (corners.every(corner => {
+        const p = corner.clone().project(camera);
+        return Math.abs(p.x) < 0.87 && p.y < 0.70 && p.y > -0.88;
+      })) break;
+      distance *= 1.06;
+    }
+    controls.update();
+  } else {
+    walker = { ...INSIDE_VIEWS[name] };
+    updateInsideCamera();
+  }
+  document.querySelectorAll('button[data-inside-view]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.insideView === name)));
+  document.getElementById('view-status').textContent = planMode ? 'Вся расстановка сверху. Потолок снят, стены условно понижены.' : 'Осмотр изнутри. Уровень глаз 1,6 метра. Потолок 2,3 метра.';
+  document.querySelector('.desktop-help').textContent = planMode ? 'Мышь — вращать · Колесо — масштаб · Правая кнопка — сдвиг' : 'Тяните — осмотреться · W A S D / стрелки — идти · Колесо — приблизить';
+  document.querySelector('.touch-help').textContent = planMode ? 'Один палец — вращать · Два — масштаб и сдвиг' : 'Тяните — осмотреться · Кнопки со стрелками — идти';
+  renderer.domElement.setAttribute('aria-label', planMode ? 'Расстановка интерьера сверху. Перетащите для вращения, колесо для масштаба.' : 'Осмотр внутри. Перетащите, чтобы оглядеться. W A S D или стрелки для перемещения. Home — исходная точка.');
+  requestRender();
+}
+
+function setMode(mode) {
+  pause();
+  heldKeys.clear();
+  insideMode = mode === 'inside';
+  planMode = false;
+  document.body.dataset.mode = mode;
+  if (insideMode) history.replaceState(null, '', '#interior');
+  else if (location.hash === '#interior') history.replaceState(null, '', location.pathname + location.search);
+  interior.visible = insideMode;
+  for (const object of [building, site, slab, lawn, earth, street]) object.visible = !insideMode;
+  car.visible = !insideMode && routeSelect.value !== 'hidden';
+  dimensions.visible = !insideMode && document.getElementById('dimensions').checked;
+  labelsLayer.hidden = !dimensions.visible;
+  scene.background.set(insideMode ? '#eeede5' : '#e6e9e0');
+  skyLight.intensity = insideMode ? 1.1 : 1.9;
+  sun.intensity = insideMode ? 1.7 : 3.2;
+  renderer.toneMappingExposure = insideMode ? 0.86 : 0.98;
+  document.querySelectorAll('button[data-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === mode)));
+  document.querySelector('.view-label').textContent = insideMode ? 'ИНТЕРЬЕР / ОСМОТР ПОМЕЩЕНИЯ' : 'MONJARO / ПРОВЕРКА ЗАЕЗДА';
+  host.setAttribute('aria-label', insideMode ? '3D-интерьер хозблока: деревянные стеллажи, ящики и садовый инвентарь' : '3D-сцена: хозблок с навесом, забором и анимацией заезда Geely Monjaro с боксом Sotra Volcano 750');
+  if (insideMode) applyInsideView('passage');
+  else {
+    controls.enabled = true;
+    controls.enablePan = true;
+    controls.minDistance = 4;
+    controls.maxDistance = 100;
+    camera.near = 0.1;
+    camera.fov = 38;
+    camera.updateProjectionMatrix();
+    renderer.domElement.setAttribute('aria-label', '3D-модель. Перетащите для вращения, колесо для масштаба. Также доступны кнопки управления камерой.');
+    document.querySelector('.desktop-help').textContent = 'Мышь — вращать · Колесо — масштаб · Правая кнопка — сдвиг';
+    document.querySelector('.touch-help').textContent = 'Один палец — вращать · Два — масштаб и сдвиг';
+    applyView('perspective');
+  }
+  updateAccess();
+  renderer.domElement.focus({ preventScroll: true });
+  if (matchMedia('(max-width: 760px)').matches) document.getElementById('viewer').scrollIntoView({ block: 'start' });
+}
+
+document.querySelectorAll('button[data-mode]').forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
+document.querySelectorAll('button[data-inside-view]').forEach(button => button.addEventListener('click', () => applyInsideView(button.dataset.insideView)));
+document.querySelectorAll('[data-step]').forEach(button => button.addEventListener('click', () => {
+  const [forward, right] = { forward: [1, 0], back: [-1, 0], left: [0, -1], right: [0, 1] }[button.dataset.step];
+  stepInside(forward, right);
+}));
+renderer.domElement.addEventListener('pointerdown', event => {
+  if (!insideMode || planMode || event.button !== 0 || drag) return;
+  drag = { id: event.pointerId, x: event.clientX, y: event.clientY };
+  renderer.domElement.setPointerCapture(event.pointerId);
+  renderer.domElement.focus({ preventScroll: true });
+});
+renderer.domElement.addEventListener('pointermove', event => {
+  if (!drag || event.pointerId !== drag.id) return;
+  walker.yaw -= (event.clientX - drag.x) * 0.0045;
+  walker.pitch = THREE.MathUtils.clamp(walker.pitch + (event.clientY - drag.y) * 0.0035, -1.15, 1.15);
+  drag.x = event.clientX;
+  drag.y = event.clientY;
+  updateInsideCamera();
+});
+for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) renderer.domElement.addEventListener(name, () => { drag = null; });
+renderer.domElement.addEventListener('wheel', event => {
+  if (!insideMode || planMode) return;
+  event.preventDefault();
+  zoom(event.deltaY > 0 ? 1.08 : 1 / 1.08);
+}, { passive: false });
+window.addEventListener('keyup', event => heldKeys.delete(event.code));
+window.addEventListener('blur', () => { heldKeys.clear(); drag = null; });
+renderer.domElement.addEventListener('blur', () => { heldKeys.clear(); drag = null; });
 document.getElementById('dimensions').addEventListener('change', event => {
   dimensions.visible = event.target.checked;
   labelsLayer.hidden = !event.target.checked;
@@ -434,13 +638,13 @@ playButton.addEventListener('click', () => {
 });
 document.getElementById('drive-reset').addEventListener('click', () => { pause(); seek(0); });
 progress.addEventListener('input', () => { const time = progress.valueAsNumber; pause(); seek(time); });
-document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { heldKeys.clear(); pause(); } });
 document.getElementById('roof-cutaway').addEventListener('change', event => { roof.visible = !event.target.checked; requestRender(); });
 function updateAccess() {
   setEntranceOpen(entranceGate, entranceOpen);
   const showRoutes = document.getElementById('access-routes').checked;
-  accessRoutes.visible = entranceOpen && showRoutes;
-  accessLabelsLayer.hidden = !showRoutes;
+  accessRoutes.visible = !insideMode && entranceOpen && showRoutes;
+  accessLabelsLayer.hidden = insideMode || !showRoutes;
   document.getElementById('entrance-gate').textContent = entranceOpen ? 'Закрыть въездные ворота' : 'Открыть въездные ворота';
   document.getElementById('access-note').textContent = entranceOpen ? 'Въезд вперёд · под навес задним ходом' : 'Въезд закрыт · откройте ворота для заезда';
   requestRender();
@@ -454,9 +658,19 @@ document.getElementById('entrance-gate').addEventListener('click', () => {
 });
 document.getElementById('access-routes').addEventListener('change', updateAccess);
 renderer.domElement.addEventListener('keydown', event => {
+  if (insideMode && !planMode && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) {
+    event.preventDefault();
+    heldKeys.add(event.code);
+    requestRender();
+    return;
+  }
   if (event.key === '+' || event.key === '=') zoom(0.8);
   if (event.key === '-') zoom(1.25);
-  if (event.key === 'Home') applyView('perspective');
+  if (event.key === 'Home') {
+    event.preventDefault();
+    if (insideMode) applyInsideView('passage');
+    else applyView('perspective');
+  }
 });
 renderer.domElement.addEventListener('webglcontextlost', event => {
   event.preventDefault();
@@ -475,8 +689,15 @@ new ResizeObserver(() => {
   camera.aspect = host.clientWidth / host.clientHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(host.clientWidth, host.clientHeight);
-  if (!fitted) { fitted = true; applyView('perspective'); controls.saveState(); }
-  else {
+  if (!fitted) {
+    fitted = true;
+    applyView('perspective');
+    controls.saveState();
+    if (location.hash === '#interior') setMode('inside');
+  }
+  else if (insideMode) {
+    if (planMode) applyInsideView('plan');
+  } else {
     const selected = document.querySelector('[data-view][aria-pressed="true"]');
     if (selected) applyView(selected.dataset.view);
   }
