@@ -1,0 +1,16 @@
+{
+  "name": "hozblock-3d",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Интерактивная внешняя модель хозблока и навеса",
+  "scripts": {
+    "start": "node server.mjs",
+    "build": "node scripts/build.mjs",
+    "preview": "node server.mjs --preview",
+    "test": "npm run build && node --test"
+  },
+  "dependencies": {
+    "three": "0.186.1"
+  }
+}

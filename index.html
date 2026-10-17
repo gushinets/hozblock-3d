@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f2ec">
+  <meta name="description" content="Интерактивная 3D-модель хозблока с навесом: полный заезд Monjaro с Sotra Volcano 750 и проверка открывания бокса.">
+  <title>Хозблок с навесом — 3D-модель</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="importmap">{"imports":{"three":"./vendor/three/three.module.js","three/addons/":"./vendor/three/addons/"}}</script>
+</head>
+<body>
+  <aside id="model-settings" class="sidebar" aria-label="Описание модели и настройки">
+    <div class="wordmark"><span class="mark" aria-hidden="true">⌑</span> УЧАСТОК <span class="edition">01 / 3D</span></div>
+    <div class="project-heading"><p class="eyebrow">ХОЗЯЙСТВЕННАЯ ЗОНА</p><h1>Хозблок<br> с навесом<span class="title-dot">.</span></h1><p class="intro">Первая объёмная модель<br>по плану и внешнему рендеру.</p></div>
+    <details class="specifications" open>
+      <summary>Параметры проекта <span aria-hidden="true">−</span></summary>
+      <dl class="metrics">
+        <div><dt>Хозблок</dt><dd>6 × 4 <small>м</small></dd></div>
+        <div><dt>Навес</dt><dd>6 × 4 <small>м</small></dd></div>
+        <div><dt>Общий габарит</dt><dd>6 × 8 <small>м</small></dd></div>
+        <div><dt>Верх общей кровли</dt><dd><span id="roof-height">3,55</span> <small>м</small></dd></div>
+        <div><dt>Под подшивкой</dt><dd><span id="soffit-height">3,305</span> <small>м</small></dd></div>
+        <div><dt>До светильников</dt><dd><span id="clear-height">3,286</span> <small>м</small></dd></div>
+        <div><dt>Площадка</dt><dd>11 × 11 <small>м</small></dd></div>
+      </dl>
+      <div class="finish"><span><i class="swatch light"></i>Светлая обшивка</span><span><i class="swatch dark"></i>Антрацит</span></div>
+    </details>
+    <div class="settings">
+      <label for="car-position" class="setting-label">Маршрут Monjaro</label>
+      <select id="car-position" aria-label="Маршрут автомобиля"><option value="canopy">Заезд под навес</option><option value="outside">На открытую площадку</option><option value="hidden">Скрыть автомобиль</option></select>
+      <label class="switch-row" for="roof-box"><span>Sotra Volcano 750</span><input id="roof-box" type="checkbox" role="switch" checked><span class="switch" aria-hidden="true"></span></label>
+      <label for="box-opening" class="lid-label">Крышка · после парковки</label>
+      <select id="box-opening" disabled aria-describedby="lid-note"><option value="closed">Бокс закрыт</option><option value="left">Открыть с левой стороны</option><option value="right">Открыть с правой стороны</option></select>
+      <label class="switch-row" for="dimensions"><span>Показать размеры</span><input id="dimensions" type="checkbox" role="switch"><span class="switch" aria-hidden="true"></span></label>
+    </div>
+    <div class="access-settings">
+      <button id="entrance-gate" type="button">Закрыть въездные ворота</button>
+      <label class="switch-row" for="access-routes"><span>Габаритный коридор</span><input id="access-routes" type="checkbox" role="switch" checked><span class="switch" aria-hidden="true"></span></label>
+      <label class="switch-row" for="roof-cutaway"><span>Скрыть кровлю</span><input id="roof-cutaway" type="checkbox" role="switch"><span class="switch" aria-hidden="true"></span></label>
+      <p id="access-note" class="access-note">Въезд вперёд · под навес задним ходом</p>
+    </div>
+    <div id="fit-summary" class="fit-summary" aria-live="polite">
+      <strong id="fit-verdict">Проверяем просвет…</strong>
+      <p id="height-result"></p><p id="opening-result"></p><p id="plan-result"></p>
+    </div>
+    <details class="vehicle-settings">
+      <summary>Габариты и допущения <span aria-hidden="true">+</span></summary>
+      <p>Monjaro: 4770 × 1895 × 1689 мм.<br>База 2845 мм · Sotra 2230 × 930 × 450 мм.</p>
+      <label for="mount-lift">Turtle Air 2: прибавка крепления, мм</label>
+      <input id="mount-lift" type="number" min="0" max="200" step="1" value="60" required aria-describedby="mount-note">
+      <p id="mount-note">60 мм — допущение: прибавка от паспортной высоты Monjaro до низа бокса. Уточните общую высоту установленного бокса от земли: она должна совпасть с расчётом.</p>
+      <p>Улица 4 м и габарит по зеркалам 2,2 м — допущения. Радиус внешнего колеса ≈ 6,14 м, не меньше паспортных 5,9 м. Геометрический запас уменьшен на 2 см.</p>
+      <p>Общая кровля поднята до 3,55 м: 3,305 м под подшивкой, минимум 3,286 м до светильников. Толщина кровли и подшивки пока условные. Скрытие кровли влияет только на изображение.</p>
+      <p id="lid-note">Двустороннее открывание показано схематично до 90°, поочерёдно с каждой стороны. Точная высота открытого Sotra не подтверждена: проверяем верх закрытого бокса + ширину 0,93 м и добавляем рабочий зазор 150 мм. Это эскизное допущение; нужен замер реального механизма.</p>
+      <p class="source-links"><a href="https://global.geely.com/en/models/monjaro" target="_blank" rel="noreferrer">Geely</a> · <a href="https://sotra-rus.ru/catalog/avtomobilnye-boksy/" target="_blank" rel="noreferrer">Sotra</a> · <a href="https://www.canotomotiv.com.tr/turtle-air-2" target="_blank" rel="noreferrer">Turtle</a></p>
+    </details>
+    <div class="sidebar-foot"><span class="status-dot" aria-hidden="true"></span> Расчёт по эскизу <span class="version">v.03</span></div>
+  </aside>
+
+  <main id="viewer" aria-label="Просмотр трёхмерной модели">
+    <header class="viewer-header"><span class="view-label">MONJARO / ПРОВЕРКА ЗАЕЗДА</span><a class="settings-link" href="#model-settings">Параметры ↓</a><span class="live-label"><span aria-hidden="true"></span>Интерактивная модель</span></header>
+    <div id="scene" role="region" aria-label="3D-сцена: хозблок с навесом, забором и анимацией заезда Geely Monjaro с боксом Sotra Volcano 750">
+      <div id="loading" role="status">Подготавливаем модель…</div>
+      <div id="dimension-labels" aria-hidden="true"></div>
+      <div id="access-labels" aria-hidden="true"></div>
+    </div>
+    <div class="playback" role="group" aria-label="Анимация заезда">
+      <div class="playback-top"><span id="drive-gear" class="gear" aria-label="Передача D">D</span><span id="drive-stage">Улица</span><output id="drive-time" for="drive-progress">0,0 / 23,6 с</output></div>
+      <div class="playback-controls"><button id="drive-play" type="button">▶ Заезд</button><button id="drive-reset" type="button" aria-label="Вернуть автомобиль на улицу" title="Сначала">↺</button><label class="sr-only" for="drive-progress">Положение автомобиля на маршруте</label><input id="drive-progress" type="range" min="0" max="24" value="0" step="0.001" aria-describedby="drive-note"></div>
+      <p id="drive-note">Оливковый — вперёд · песочный — задний ход</p>
+    </div>
+    <div class="view-presets" role="group" aria-label="Ракурсы модели">
+      <button type="button" data-view="perspective" aria-pressed="true">Общий вид</button>
+      <button type="button" data-view="entrance" aria-pressed="false">Въезд</button>
+      <button type="button" data-view="front" aria-pressed="false">Ворота хозблока</button>
+      <button type="button" data-view="top" aria-pressed="false">Сверху</button>
+      <button type="button" data-view="clearance" aria-pressed="false">Просвет</button>
+      <button type="button" data-view="back" aria-pressed="false">Обратная сторона</button>
+    </div>
+    <div class="camera-tools" role="group" aria-label="Управление камерой">
+      <button type="button" id="zoom-in" aria-label="Приблизить" title="Приблизить">+</button>
+      <button type="button" id="zoom-out" aria-label="Отдалить" title="Отдалить">−</button>
+      <span class="tool-divider"></span>
+      <button type="button" id="rotate-left" aria-label="Повернуть влево" title="Повернуть влево">↶</button>
+      <button type="button" id="rotate-right" aria-label="Повернуть вправо" title="Повернуть вправо">↷</button>
+      <button type="button" id="tilt-up" aria-label="Поднять точку обзора" title="Поднять точку обзора">↑</button>
+      <button type="button" id="tilt-down" aria-label="Опустить точку обзора" title="Опустить точку обзора">↓</button>
+      <span class="tool-divider"></span>
+      <button type="button" id="reset" aria-label="Вернуть исходный вид" title="Вернуть исходный вид">⌂</button>
+    </div>
+    <footer class="viewer-footer"><span class="desktop-help">Мышь — вращать <b>·</b> Колесо — масштаб <b>·</b> Правая кнопка — сдвиг</span><span class="touch-help">Один палец — вращать · Два — масштаб и сдвиг</span><span class="units">1 единица = 1 метр</span></footer>
+    <p id="view-status" class="sr-only" aria-live="polite"></p>
+  </main>
+  <noscript><p>Для просмотра модели включите JavaScript в браузере.</p></noscript>
+  <script type="module">
+    import('./app.js').catch(error => {
+      console.error(error);
+      const message = document.getElementById('loading');
+      message.hidden = false;
+      message.textContent = 'Не удалось открыть 3D-сцену. Нужен браузер с WebGL 2 и включённым аппаратным ускорением. Попробуйте Edge или Chrome.';
+      message.setAttribute('role', 'alert');
+    });
+  </script>
+</body>
+</html>
