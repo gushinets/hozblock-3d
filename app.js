@@ -229,7 +229,8 @@ function updatePlayback() {
   setCarPose(car, pose);
   car.visible = !hidden && !insideMode;
   const parked = !hidden && !playing && pose.gear === 'P' && maxTime === analysis.duration;
-  lidSelect.disabled = !parked || !boxToggle.checked || !!analysis.openingCollision || !mountInput.checkValidity();
+  const lidFits = !analysis.openingCollision && (routeSelect.value === 'outside' || analysis.openingClearance >= OPENING_RESERVE);
+  lidSelect.disabled = !parked || !boxToggle.checked || !lidFits || !mountInput.checkValidity();
   if (lidSelect.disabled && lidSelect.value !== 'closed') {
     lidSelect.value = 'closed';
     setRoofBoxOpening(car, 'closed');
@@ -249,8 +250,8 @@ function updatePlayback() {
   playButton.disabled = hidden || !entranceOpen || !mountInput.checkValidity();
   driveNote.textContent = !entranceOpen ? 'Откройте ворота, чтобы начать заезд.' : analysis.firstHeight >= 0
     ? `Высота ${decimal(analysis.totalHeight)} м: заезд остановится перед препятствием.`
-    : parked && boxToggle.checked ? `Крышка: габарит ≤ ${decimal(analysis.openingHeight)} м. Выберите сторону открытия в параметрах.`
-      : 'Полный заезд · оливковый — вперёд · песочный — задний ход';
+    : parked && boxToggle.checked ? lidFits ? 'Припаркован. Крышку можно открыть в параметрах.' : 'Полный заезд завершён · под навесом бокс остаётся закрытым.'
+      : `${boxToggle.checked ? 'Заезд с закрытым боксом' : 'Полный заезд'} · оливковый — вперёд · песочный — задний ход`;
 }
 
 function seek(time) {
@@ -288,21 +289,25 @@ function rebuildManeuver() {
   accessRoutes.clear();
   accessRoutes.add(createAccessRoutes(poses));
   const heightFits = analysis.clearance >= 0;
-  const openingFits = !boxToggle.checked || (analysis.openingClearance >= OPENING_RESERVE && !analysis.openingCollision);
   const outside = routeSelect.value === 'outside';
-  document.getElementById('fit-summary').dataset.fit = String(analysis.firstPlan < 0 && (outside || (heightFits && openingFits)));
-  document.getElementById('fit-verdict').textContent = analysis.firstPlan >= 0 ? 'Маршрут пересекает препятствие' : outside
-    ? 'Заезд на площадку проходит' : !heightFits ? 'Под навес не проходит' : !openingFits ? 'Заезд проходит · для крышки нет запаса'
-      : boxToggle.checked ? 'Заезд и открывание бокса проходят' : 'Без бокса под навес проходит';
+  const openingFits = !analysis.openingCollision && (outside || analysis.openingClearance >= OPENING_RESERVE);
+  document.getElementById('fit-summary').dataset.fit = String(analysis.firstPlan < 0 && analysis.firstHeight < 0 && (outside || heightFits));
+  document.getElementById('fit-verdict').textContent = analysis.firstPlan >= 0 ? 'Маршрут пересекает препятствие'
+    : analysis.firstHeight >= 0 ? 'Заезд остановится перед препятствием' : outside
+    ? 'Заезд на площадку проходит' : !heightFits ? 'Под навес не проходит'
+      : boxToggle.checked ? 'Monjaro с закрытым боксом проходит' : 'Без бокса под навес проходит';
   document.getElementById('height-result').textContent = `${outside ? 'Под навесом: высота' : 'Высота'} ${decimal(analysis.totalHeight)} м · мин. просвет ${decimal(CANOPY_CLEARANCE)} м. `
     + (heightFits ? `Запас ${Math.round(analysis.clearance * 1000)} мм.` : `Не хватает ${Math.round(-analysis.clearance * 1000)} мм.`);
   const openingResult = document.getElementById('opening-result');
   openingResult.hidden = !boxToggle.checked;
-  openingResult.textContent = !boxToggle.checked ? '' : analysis.openingCollision ? `Габарит открывания пересекает: ${analysis.openingCollision}.`
-    : `Крышка с любой стороны: расчётный габарит ≤ ${decimal(analysis.openingHeight)} м; запас ${Math.round(analysis.openingClearance * 1000)} мм. Заложено ≥ ${OPENING_RESERVE * 1000} мм.`;
+  openingResult.textContent = !boxToggle.checked ? '' : !openingFits
+    ? 'Под навесом бокс остаётся закрытым: для открывания высоты не хватает.'
+    : outside ? 'На открытой стоянке крышку можно открыть после парковки.'
+      : `Открывание проходит с рабочим запасом ≥ ${OPENING_RESERVE * 1000} мм.`;
   document.getElementById('roof-height').textContent = decimal(DIMENSIONS.height, 2);
   document.getElementById('soffit-height').textContent = decimal(SOFFIT_CLEARANCE);
   document.getElementById('clear-height').textContent = decimal(CANOPY_CLEARANCE);
+  document.getElementById('interior-height').textContent = decimal(INTERIOR.height);
   document.getElementById('plan-result').textContent = `На всём маршруте: до препятствий ≥ ${Math.round(analysis.minObstacle * 100)} см, до края покрытия ≥ ${Math.round(analysis.minSurface * 100)} см. По эскизным размерам.`;
   updateAccess();
   updatePlayback();
@@ -532,7 +537,7 @@ function applyInsideView(name) {
     updateInsideCamera();
   }
   document.querySelectorAll('button[data-inside-view]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.insideView === name)));
-  document.getElementById('view-status').textContent = planMode ? 'Вся расстановка сверху. Потолок снят, стены условно понижены.' : 'Осмотр изнутри. Уровень глаз 1,6 метра. Потолок 2,3 метра.';
+  document.getElementById('view-status').textContent = planMode ? 'Вся расстановка сверху. Потолок снят, стены условно понижены.' : `Осмотр изнутри. Уровень глаз 1,6 метра. Потолок ${decimal(INTERIOR.height)} метра.`;
   document.querySelector('.desktop-help').textContent = planMode ? 'Мышь — вращать · Колесо — масштаб · Правая кнопка — сдвиг' : 'Тяните — осмотреться · W A S D / стрелки — идти · Колесо — приблизить';
   document.querySelector('.touch-help').textContent = planMode ? 'Один палец — вращать · Два — масштаб и сдвиг' : 'Тяните — осмотреться · Кнопки со стрелками — идти';
   renderer.domElement.setAttribute('aria-label', planMode ? 'Расстановка интерьера сверху. Перетащите для вращения, колесо для масштаба.' : 'Осмотр внутри. Перетащите, чтобы оглядеться. W A S D или стрелки для перемещения. Home — исходная точка.');

@@ -4,7 +4,7 @@ import { DIMENSIONS as d } from './model.js';
 const start = d.canopyStart + d.sectionDepth;
 export const INTERIOR = Object.freeze({
   west: d.wall, east: d.width - d.wall, north: start + d.wall,
-  south: start + d.sectionDepth - d.wall, height: 2.3, eye: 1.6, radius: 0.18,
+  south: start + d.sectionDepth - d.wall, height: d.height - d.roof - d.soffit, eye: 1.6, radius: 0.18,
 });
 
 // Размеры мебели восстановлены по пропорциям фотографий; заменить после обмеров.
@@ -65,7 +65,7 @@ export function createInterior(overrides = {}) {
   const ceiling = new THREE.Group();
   const furnishings = new THREE.Group();
   enclosure.name = 'Стены и дверные проёмы интерьера';
-  ceiling.name = 'Отдельный потолок 2.3 м';
+  ceiling.name = 'Потолок под общей кровлей';
   furnishings.name = 'Стеллажи и садовый инвентарь';
   interior.add(enclosure, ceiling, furnishings);
   const material = {
@@ -141,7 +141,7 @@ export function createInterior(overrides = {}) {
   for (const x of [1.08, 2.02]) box('Наличник двери', [0.045, 1.95, 0.035], [x, 0.975, end - d.wall - 0.01], material.white, enclosure);
   box('Верхний наличник', [0.985, 0.045, 0.035], [1.55, 1.95, end - d.wall - 0.01], material.white, enclosure);
   tube('Ручка двери изнутри', [1.79, 0.96, end - 0.085], [1.91, 0.96, end - 0.085], 0.014, material.black, enclosure);
-  box('Потолок на отдельной отметке', [6, 0.04, 4], [3, h + 0.02, start + 2], material.plaster, ceiling);
+  box('Подшивка потолка', [6, d.soffit, 4], [3, h + d.soffit / 2, start + 2], material.plaster, ceiling);
   for (const x of [1.8, 4.4]) {
     box('Потолочный светильник', [0.75, 0.035, 0.20], [x, h - 0.025, 7.1], material.light, ceiling);
     const light = new THREE.PointLight('#fff2d9', 8, 7, 2);

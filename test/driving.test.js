@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { VEHICLE as v, CAR_POSITIONS, createModel, createSite, collisionBoxes, setEntranceOpen } from '../model.js';
-import { buildManeuver, sampleManeuver, footprint, overlaps, polygonDistance, analyzeManeuver, CANOPY_CLEARANCE, SOFFIT_CLEARANCE, OPENING_RESERVE, CENTER_FROM_REAR, REAR_TURN_RADIUS } from '../driving.js';
+import { buildManeuver, sampleManeuver, footprint, overlaps, polygonDistance, analyzeManeuver, CANOPY_CLEARANCE, SOFFIT_CLEARANCE, CENTER_FROM_REAR, REAR_TURN_RADIUS } from '../driving.js';
 
 const close = (a, b, epsilon = 1e-6) => assert.ok(Math.abs(a - b) < epsilon, `${a} != ${b}`);
 const { building } = createModel();
@@ -55,7 +55,7 @@ test('Проверка пересечений учитывает поворот 
   close(polygonDistance(rotated, far), 2);
 });
 
-test('Поднятый навес пропускает полный заезд с боксом и оставляет запас для открытия', () => {
+test('Кровля 2.70 м пропускает полный заезд с закрытым боксом с запасом 237 мм', () => {
   const poses = buildManeuver();
   const loaded = analyzeManeuver(poses, obstacles);
   assert.equal(loaded.firstPlan, -1);
@@ -63,24 +63,24 @@ test('Поднятый навес пропускает полный заезд �
   assert.ok(loaded.minObstacle >= 0.17 && loaded.minObstacle < 0.19);
   close(loaded.minSurface, 0.155);
   close(loaded.totalHeight, 2.199);
-  close(SOFFIT_CLEARANCE, 3.305);
-  close(CANOPY_CLEARANCE, 3.286);
-  close(loaded.clearance, 1.087);
+  close(SOFFIT_CLEARANCE, 2.455);
+  close(CANOPY_CLEARANCE, 2.436);
+  close(loaded.clearance, 0.237);
+  assert.ok(loaded.clearance >= 0.20);
   close(loaded.openingHeight, 3.129);
-  close(loaded.openingClearance, 0.157);
-  assert.ok(loaded.openingClearance >= OPENING_RESERVE);
-  assert.equal(loaded.openingCollision, '');
+  close(loaded.openingClearance, -0.693);
+  assert.ok(loaded.openingCollision, 'Под кровлей крышка должна оставаться закрытой');
   const unloaded = analyzeManeuver(poses, obstacles, { box: false });
   assert.equal(unloaded.firstPlan, -1);
   assert.equal(unloaded.firstHeight, -1);
-  close(unloaded.clearance, 1.537);
+  close(unloaded.clearance, 0.687);
   assert.equal(unloaded.openingHeight, null);
   const zeroLift = analyzeManeuver(poses, obstacles, { mountLift: 0 });
   assert.equal(zeroLift.firstHeight, -1);
-  close(zeroLift.clearance, 1.147);
+  close(zeroLift.clearance, 0.297);
   const higherRack = analyzeManeuver(poses, obstacles, { mountLift: 0.09 });
   assert.equal(higherRack.firstHeight, -1);
-  assert.ok(higherRack.openingClearance < OPENING_RESERVE, 'Недостаточный рабочий запас должен отличаться от физического столкновения');
+  close(higherRack.clearance, 0.207);
   assert.throws(() => analyzeManeuver(poses, obstacles, { mountLift: Infinity }));
 });
 
@@ -90,7 +90,7 @@ test('Низкая балка всё ещё останавливает заез�
   const blocked = analyzeManeuver(poses, [...obstacles, beam]);
   assert.ok(blocked.firstHeight > 0);
   const shelf = { name: 'Полка над боксом', minX: 2, maxX: 4, minZ: 2, maxZ: 3, minY: 2.7, maxY: 2.8 };
-  const opening = analyzeManeuver(poses, [...obstacles, shelf]);
+  const opening = analyzeManeuver(poses, [shelf]);
   assert.equal(opening.firstHeight, -1);
   assert.equal(opening.openingCollision, shelf.name);
 });
@@ -100,6 +100,7 @@ test('Бокс допускает стоянку на открытой площ�
   const open = analyzeManeuver(poses, obstacles);
   assert.equal(open.firstPlan, -1);
   assert.equal(open.firstHeight, -1);
+  assert.equal(open.openingCollision, '', 'На открытой площадке над боксом нет кровли');
   setEntranceOpen(entranceGate, false);
   const closed = analyzeManeuver(poses, collisionBoxes(building, site));
   assert.ok(closed.firstPlan > 0);

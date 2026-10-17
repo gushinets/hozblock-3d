@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 // Метры. X — вправо на плане, Z — вниз на плане, Y — высота.
 export const DIMENSIONS = Object.freeze({
-  width: 6, sectionDepth: 4, height: 3.55, paving: 11,
+  width: 6, sectionDepth: 4, height: 2.7, paving: 11,
   canopyStart: 1.1, wall: 0.12, roof: 0.22, overhang: 0.15,
   soffit: 0.025, lampDrop: 0.044,
   gateWidth: 1.6, gateHeight: 1.92, doorWidth: 0.9, doorOffset: 1.1,

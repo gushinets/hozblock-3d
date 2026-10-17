@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Box3 } from 'three';
 import { DIMENSIONS as d, SITE, VEHICLE, ROOF_BOX, createModel, createCar, placeCar, createSite, setEntranceOpen, updateRoofLoad, setRoofBoxOpening, setCarPose } from '../model.js';
-import { roofBoxOpeningEnvelope, OPENING_RESERVE, CANOPY_CLEARANCE } from '../driving.js';
+import { roofBoxOpeningEnvelope, CANOPY_CLEARANCE } from '../driving.js';
 
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-6, `${actual} != ${expected}`);
 
-test('Габариты стен 6 × 4 м, единая кровля поднята до 3.55 м', () => {
+test('Габариты стен 6 × 4 м, верх общей кровли на 2.70 м', () => {
   const { shell, roof } = createModel();
   const walls = new Box3().setFromObject(shell);
   close(walls.min.x, 0);
@@ -16,7 +16,7 @@ test('Габариты стен 6 × 4 м, единая кровля подня�
   close(walls.max.y, d.height - d.roof);
   const roofBounds = new Box3().setFromObject(roof);
   close(roofBounds.max.y, d.height);
-  close(roofBounds.max.y, 3.55);
+  close(roofBounds.max.y, 2.7);
   close(roofBounds.max.x - roofBounds.min.x, 6 + 2 * d.overhang);
   close(roofBounds.max.z - roofBounds.min.z, 8 + 2 * d.overhang);
 });
@@ -29,6 +29,7 @@ test('Крышка открывается поочерёдно с двух ст�
   const maxX = Math.max(...envelope.polygon.map(p => p.x));
   const minZ = Math.min(...envelope.polygon.map(p => p.z));
   const maxZ = Math.max(...envelope.polygon.map(p => p.z));
+  let exceedsCanopy = false;
   for (const side of ['left', 'right']) {
     for (let degrees = 0; degrees <= 90; degrees++) {
       setRoofBoxOpening(car, side, degrees * Math.PI / 180);
@@ -36,9 +37,10 @@ test('Крышка открывается поочерёдно с двух ст�
       assert.ok(bounds.min.x >= minX - 1e-6 && bounds.max.x <= maxX + 1e-6);
       assert.ok(bounds.min.z >= minZ - 1e-6 && bounds.max.z <= maxZ + 1e-6);
       assert.ok(bounds.max.y <= envelope.maxY);
-      assert.ok(CANOPY_CLEARANCE - bounds.max.y >= OPENING_RESERVE);
+      if (bounds.max.y > CANOPY_CLEARANCE) exceedsCanopy = true;
     }
   }
+  assert.ok(exceedsCanopy, 'Под низкой кровлей раскрытие крышки не помещается');
   assert.throws(() => setRoofBoxOpening(car, 'both'));
   assert.throws(() => setRoofBoxOpening(car, 'left', NaN));
   assert.throws(() => setRoofBoxOpening(car, 'left', Math.PI));

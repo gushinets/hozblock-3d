@@ -1,14 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Box3 } from 'three';
+import { DIMENSIONS as d } from '../model.js';
 import { INTERIOR as room, FURNITURE, INSIDE_VIEWS, createInterior, canStandInside, moveInside } from '../interior.js';
 
-test('Интерьер помещается в хозблоке, отдельный потолок находится на 2.3 м', () => {
+test('Интерьер помещается в хозблоке, потолок 2.455 м согласован с кровлей 2.70 м', () => {
   const { interior, furnishings, ceiling } = createInterior();
   const floor = new Box3().setFromObject(interior.getObjectByName('Пол под дерево'));
   assert.ok(Math.abs(floor.max.x - floor.min.x - 6) < 1e-6);
   assert.ok(Math.abs(floor.max.z - floor.min.z - 4) < 1e-6);
-  assert.ok(Math.abs(new Box3().setFromObject(ceiling.getObjectByName('Потолок на отдельной отметке')).min.y - room.height) < 1e-6);
+  const ceilingBounds = new Box3().setFromObject(ceiling.getObjectByName('Подшивка потолка'));
+  assert.ok(Math.abs(ceilingBounds.min.y - 2.455) < 1e-6);
+  assert.ok(Math.abs(ceilingBounds.min.y - room.height) < 1e-6);
+  assert.ok(Math.abs(ceilingBounds.max.y - (d.height - d.roof)) < 1e-6);
   assert.ok(room.eye < room.height && room.eye === 1.6);
   for (const item of FURNITURE) {
     const b = new Box3().setFromObject(furnishings.getObjectByName(item.id));
