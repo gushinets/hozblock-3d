@@ -1,14 +1,21 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { createLandscape } from './landscape.js';
+import { createReviewer } from './review.js';
 import { SITE, DIMENSIONS, createModel, createCar, createSite, setEntranceOpen, updateRoofLoad, setRoofBoxOpening, setCarPose, collisionBoxes } from './model.js';
 import { buildManeuver, sampleManeuver, analyzeManeuver, createAccessRoutes, CANOPY_CLEARANCE, SOFFIT_CLEARANCE, OPENING_RESERVE } from './driving.js';
-import { INTERIOR, INSIDE_VIEWS, createInterior, moveInside } from './interior.js';
+import { INTERIOR, INSIDE_VIEWS, createInterior, moveInside, canStandInside } from './interior.js';
 
 let insideMode = false, planMode = false;
 let walker = { ...INSIDE_VIEWS.passage };
 const heldKeys = new Set();
 let walkTick = 0, drag = null;
+let review = null;
 
 const host = document.getElementById('scene');
 const labelsLayer = document.getElementById('dimension-labels');
@@ -16,15 +23,16 @@ const accessLabelsLayer = document.getElementById('access-labels');
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.98;
+renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.toneMapping = THREE.AgXToneMapping;
+renderer.toneMappingExposure = 1.05;
 renderer.domElement.tabIndex = 0;
 renderer.domElement.setAttribute('aria-label', '3D-модель. Перетащите для вращения, колесо для масштаба. Также доступны кнопки управления камерой.');
 host.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#e6e9e0');
+scene.background = new THREE.Color('#b6bec1');
+scene.fog = new THREE.Fog('#b6bec1', 32, 95);
 const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 150);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = !matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -41,16 +49,17 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 const room = new RoomEnvironment();
 const environment = pmrem.fromScene(room, 0.04);
 scene.environment = environment.texture;
-scene.environmentIntensity = 0.3;
+scene.environmentIntensity = 0.45;
 room.dispose();
 pmrem.dispose();
-const skyLight = new THREE.HemisphereLight('#f7f6ee', '#788171', 1.9);
+const skyLight = new THREE.HemisphereLight('#e8eef4', '#68705b', 1.1);
 scene.add(skyLight);
-const sun = new THREE.DirectionalLight('#fff4dc', 3.2);
-sun.position.set(2, 13, -7);
+const sun = new THREE.DirectionalLight('#fff5e4', 2.1);
+sun.position.set(-5, 16, -8);
 sun.target.position.set(3, 0, 5);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(4096, 4096);
+sun.shadow.radius = 5;
 sun.shadow.camera.left = -18;
 sun.shadow.camera.right = 18;
 sun.shadow.camera.top = 18;
@@ -60,6 +69,16 @@ sun.shadow.camera.far = 45;
 sun.shadow.normalBias = 0.025;
 sun.shadow.bias = -0.00015;
 scene.add(sun, sun.target);
+const composer = new EffectComposer(renderer);
+composer.renderTarget1.samples = 4;
+composer.renderTarget2.samples = 4;
+composer.addPass(new RenderPass(scene, camera));
+const ambientOcclusion = new SSAOPass(scene, camera, 1, 1, 16);
+ambientOcclusion.kernelRadius = 6;
+ambientOcclusion.minDistance = 0.001;
+ambientOcclusion.maxDistance = 0.025;
+composer.addPass(ambientOcclusion);
+composer.addPass(new OutputPass());
 
 let seed = 718;
 function random() {
@@ -78,43 +97,76 @@ function texture(draw, size = 512) {
 }
 
 const siding = texture((ctx, size) => {
-  ctx.fillStyle = '#f4f0e7';
+  ctx.fillStyle = '#c9c5b9';
   ctx.fillRect(0, 0, size, size);
-  for (let row = 0; row < 7; row++) {
-    const y = row * size / 7;
-    ctx.fillStyle = '#bfc2b8';
-    ctx.fillRect(0, y, size, 3);
-    ctx.fillStyle = '#fffaf0';
-    ctx.fillRect(0, y + 2, size, 2);
-    for (let i = 0; i < 65; i++) {
-      ctx.strokeStyle = `rgba(150,143,125,${random() * 0.05})`;
-      const x = random() * size;
-      const grainY = y + 5 + random() * (size / 7 - 8);
-      ctx.beginPath();ctx.moveTo(x, grainY);ctx.lineTo(x + 20 + random() * 180, grainY);ctx.stroke();
-    }
+  for (let i = 0; i < 65000; i++) {
+    const shade = Math.floor(130 + random() * 100);
+    ctx.fillStyle = `rgba(${shade},${shade - 3},${shade - 9},0.14)`;
+    ctx.fillRect(random() * size, random() * size, 0.6 + random() * 2, 0.6 + random() * 2);
+  }
+}, 1024);
+const surfaceGrain = texture((ctx, size) => {
+  ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 42000; i++) {
+    ctx.fillStyle = random() > 0.5 ? '#ffffff20' : '#00000020';
+    ctx.fillRect(random() * size, random() * size, 1, 1);
   }
 });
-const wallMaterial = new THREE.MeshStandardMaterial({ color: '#ffffff', map: siding, roughness: 0.84 });
-const soffitMaterial = new THREE.MeshStandardMaterial({ color: '#eee7d6', map: siding, roughness: 0.88 });
-const { building, roof } = createModel({ wall: wallMaterial, soffit: soffitMaterial });
+surfaceGrain.colorSpace = THREE.NoColorSpace;
+surfaceGrain.repeat.set(6, 6);
+const wallMaterial = new THREE.MeshStandardMaterial({ map: siding, bumpMap: surfaceGrain, bumpScale: 0.004, roughness: 0.94 });
+const soffitMaterial = new THREE.MeshStandardMaterial({ color: '#b6b1a4', bumpMap: surfaceGrain, bumpScale: 0.002, roughness: 0.85 });
+const monoRoof = new URLSearchParams(location.search).get('roof') === 'mono';
+const { building, roof, profile } = createModel({ wall: wallMaterial, soffit: soffitMaterial,
+  dark: new THREE.MeshStandardMaterial({ color: '#252a2c', metalness: 0.3, roughness: 0.4, bumpMap: surfaceGrain, bumpScale: 0.001 }),
+  roof: new THREE.MeshStandardMaterial({ color: '#555a59', roughness: 0.88, bumpMap: surfaceGrain, bumpScale: 0.0015 }) },
+  monoRoof ? { slope: 0.03, minClearHeight: 2.3, concealed: true } : null);
+const fascia = roof.getObjectByName('Съёмная фальшпанель кровли');
+document.getElementById('fascia-row').hidden = !fascia;
+document.getElementById('fascia-cutaway').addEventListener('change', event => {
+  if (fascia) fascia.visible = !event.target.checked;
+  requestRender();
+});
+const canopyClearance = profile?.canopyClearance ?? CANOPY_CLEARANCE;
+const soffitClearance = profile?.canopySoffit ?? SOFFIT_CLEARANCE;
+const interiorHeight = profile?.minClearHeight ?? INTERIOR.height;
+const roofHeight = profile?.highEdge ?? DIMENSIONS.height;
+const silhouetteHeight = profile?.screenTop ?? roofHeight;
+document.getElementById('roof-profile-panel').hidden = !monoRoof;
+document.getElementById(monoRoof ? 'roof-mono-link' : 'roof-flat-link').setAttribute('aria-current', 'page');
+if (profile) {
+  document.title = 'Скрытый скат — хозблок с навесом';
+  document.getElementById('roof-clearance-note').textContent = 'Эскиз: уклон 3% от навеса к задней стене, под мембранное или рулонное покрытие. Верхний край 2,79 м, низкий 2,54 м; чистый потолок внутри от 2,30 до 2,42 м. Расчётный просвет навеса с резервом на светильники — 2,401 м. Толщина конструкции условная. Скрытие кровли влияет только на изображение.';
+  document.getElementById('lid-note').textContent = 'Под этой кровлей бокс остаётся закрытым. Двустороннее открывание доступно после парковки на открытой площадке. Геометрия механизма и креплений пока эскизная.';
+}
 scene.add(building);
+for (const z of [5.65, 8.55]) {
+  for (const direction of [-1, 1]) {
+    const light = new THREE.SpotLight('#ffe0ab', 9, 1.7, 0.48, 0.7, 2);
+    light.position.set(6.14, 1.55 + direction * 0.1, z);
+    light.target.position.set(6.005, 1.55 + direction * 1.0, z);
+    building.add(light, light.target);
+  }
+}
 const { site, entranceGate } = createSite();
 scene.add(site);
+const landscape = createLandscape(texture, random);
+scene.add(landscape);
 
 const paving = texture((ctx, size) => {
-  ctx.fillStyle = '#969d91';
+  ctx.fillStyle = '#555c60';
   ctx.fillRect(0, 0, size, size);
-  const w = size / 6;
-  const h = size / 12;
-  for (let row = 0; row < 12; row++) {
-    for (let col = -1; col < 7; col++) {
-      const shade = Math.floor(145 + random() * 32);
+  const w = size / 12;
+  const h = size / 24;
+  for (let row = 0; row < 24; row++) {
+    for (let col = -1; col < 13; col++) {
+      const shade = Math.floor(105 + random() * 28);
       const x = (col + (row % 2) / 2) * w;
       const y = row * h;
-      ctx.fillStyle = `rgb(${shade + 7},${shade + 8},${shade + 2})`;
-      ctx.fillRect(x + 1.7, y + 1.7, w - 3.4, h - 3.4);
-      ctx.strokeStyle = '#ffffff22';
-      ctx.strokeRect(x + 3, y + 3, w - 6, h - 6);
+      ctx.fillStyle = `rgb(${shade},${shade + 2},${shade + 3})`;
+      ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+      ctx.strokeStyle = '#ffffff16';
+      ctx.strokeRect(x + 2, y + 2, w - 4, h - 4);
     }
   }
   for (let i = 0; i < 19000; i++) {
@@ -122,23 +174,23 @@ const paving = texture((ctx, size) => {
     ctx.fillRect(random() * size, random() * size, 1, 1);
   }
 }, 1024);
-paving.repeat.set(11 / 2.4, 11 / 2.4);
-const paverMaterial = new THREE.MeshStandardMaterial({ map: paving, roughness: 0.96 });
-const edgeMaterial = new THREE.MeshStandardMaterial({ color: '#a8ada0', roughness: 1 });
+paving.repeat.set(11 / 3.6, 11 / 3.6);
+const paverMaterial = new THREE.MeshStandardMaterial({ map: paving, bumpMap: paving, bumpScale: 0.012, roughness: 0.94 });
+const edgeMaterial = new THREE.MeshStandardMaterial({ color: '#777d7d', roughness: 1 });
 const slab = new THREE.Mesh(new THREE.BoxGeometry(11, 0.12, 11), [edgeMaterial, edgeMaterial, paverMaterial, edgeMaterial, edgeMaterial, edgeMaterial]);
 slab.position.set(5.5, -0.065, 5.5);
 slab.receiveShadow = true;
 scene.add(slab);
 
 const grass = texture((ctx, size) => {
-  ctx.fillStyle = '#788a59';ctx.fillRect(0, 0, size, size);
-  for (let i = 0; i < 55000; i++) {
-    ctx.fillStyle = random() > 0.5 ? '#d1d4a12b' : '#42553d2c';
-    ctx.fillRect(random() * size, random() * size, 1, 2 + random() * 3);
+  ctx.fillStyle = '#697347';ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 85000; i++) {
+    ctx.fillStyle = ['#9b9e5945', '#45542e60', '#a8a46b35', '#3d552e45'][i % 4];
+    ctx.fillRect(random() * size, random() * size, 1, 1 + random() * 4);
   }
 });
-grass.repeat.set(7, 7);
-const lawn = new THREE.Mesh(new THREE.BoxGeometry(18.8, 0.1, 16.4), new THREE.MeshStandardMaterial({ map: grass, roughness: 1 }));
+grass.repeat.set(40, 40);
+const lawn = new THREE.Mesh(new THREE.BoxGeometry(150, 0.1, 150), new THREE.MeshStandardMaterial({ map: grass, bumpMap: grass, bumpScale: 0.018, roughness: 1 }));
 lawn.position.set(7.6, -0.15, 3.9);
 lawn.receiveShadow = true;
 scene.add(lawn);
@@ -146,11 +198,20 @@ const earth = new THREE.Mesh(new THREE.BoxGeometry(18.8, 0.13, 16.4), new THREE.
 earth.position.set(7.6, -0.265, 3.9);
 earth.castShadow = true;
 scene.add(earth);
-const street = new THREE.Mesh(new THREE.BoxGeometry(18.8, 0.12, SITE.streetDepth), new THREE.MeshStandardMaterial({ color: '#707873', roughness: 0.98 }));
+const asphalt = texture((ctx, size) => {
+  ctx.fillStyle = '#50565a'; ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 65000; i++) {
+    ctx.fillStyle = random() > 0.5 ? '#f6f4e22b' : '#17201930';
+    const grain = 0.5 + random() * 1.8;
+    ctx.fillRect(random() * size, random() * size, grain, grain);
+  }
+});
+asphalt.repeat.set(8, 2);
+const street = new THREE.Mesh(new THREE.BoxGeometry(150, 0.12, SITE.streetDepth), new THREE.MeshStandardMaterial({ map: asphalt, bumpMap: asphalt, bumpScale: 0.006, roughness: 0.98 }));
 street.position.set(7.6, -0.065, -SITE.streetDepth / 2);
 street.receiveShadow = true;
 scene.add(street);
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: '#e6e9e0', roughness: 1 }));
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: '#787d69', roughness: 1 }));
 floor.rotation.x = -Math.PI / 2;
 floor.position.y = -0.335;
 floor.receiveShadow = true;
@@ -194,10 +255,12 @@ const oakFloor = texture((ctx, size) => {
   }
 }, 1024);
 const { interior, enclosure, ceiling } = createInterior({
-  wood: new THREE.MeshStandardMaterial({ map: pine, roughness: 0.82 }),
-  floor: new THREE.MeshStandardMaterial({ map: oakFloor, roughness: 0.87 }),
-  door: new THREE.MeshStandardMaterial({ map: pine, color: '#79634b', roughness: 0.84 }),
-});
+  wood: new THREE.MeshStandardMaterial({ map: pine, bumpMap: pine, bumpScale: 0.0025, roughness: 0.78 }),
+  floor: new THREE.MeshStandardMaterial({ map: oakFloor, bumpMap: oakFloor, bumpScale: 0.003, roughness: 0.76 }),
+  door: new THREE.MeshStandardMaterial({ map: pine, color: '#79634b', bumpMap: pine, bumpScale: 0.002, roughness: 0.8 }),
+  plaster: new THREE.MeshStandardMaterial({ color: '#f1eee6', bumpMap: surfaceGrain, bumpScale: 0.0015, roughness: 0.94 }),
+  gate: new THREE.MeshStandardMaterial({ color: '#838b87', metalness: 0.3, roughness: 0.5, bumpMap: surfaceGrain, bumpScale: 0.001 }),
+}, profile);
 interior.visible = false;
 scene.add(interior);
 
@@ -280,7 +343,7 @@ function rebuildManeuver() {
   poses = buildManeuver(routeSelect.value === 'outside' ? 'outside' : 'canopy');
   const mountLift = mountInput.valueAsNumber / 1000;
   updateRoofLoad(car, boxToggle.checked, mountLift);
-  analysis = analyzeManeuver(poses, obstacles, { box: boxToggle.checked, mountLift });
+  analysis = analyzeManeuver(poses, obstacles, { box: boxToggle.checked, mountLift, canopyClearance });
   const collisions = [analysis.firstPlan, analysis.firstHeight].filter(index => index >= 0);
   // Останавливаемся за 0,1 с до первого возможного касания габаритного прямоугольника.
   maxTime = collisions.length ? Math.max(0, poses[Math.max(0, Math.min(...collisions) - 1)].time - 0.1) : analysis.duration;
@@ -296,7 +359,7 @@ function rebuildManeuver() {
     : analysis.firstHeight >= 0 ? 'Заезд остановится перед препятствием' : outside
     ? 'Заезд на площадку проходит' : !heightFits ? 'Под навес не проходит'
       : boxToggle.checked ? 'Monjaro с закрытым боксом проходит' : 'Без бокса под навес проходит';
-  document.getElementById('height-result').textContent = `${outside ? 'Под навесом: высота' : 'Высота'} ${decimal(analysis.totalHeight)} м · мин. просвет ${decimal(CANOPY_CLEARANCE)} м. `
+  document.getElementById('height-result').textContent = `${outside ? 'Под навесом: высота' : 'Высота'} ${decimal(analysis.totalHeight)} м · расчётный просвет ${decimal(canopyClearance)} м. `
     + (heightFits ? `Запас ${Math.round(analysis.clearance * 1000)} мм.` : `Не хватает ${Math.round(-analysis.clearance * 1000)} мм.`);
   const openingResult = document.getElementById('opening-result');
   openingResult.hidden = !boxToggle.checked;
@@ -304,10 +367,10 @@ function rebuildManeuver() {
     ? 'Под навесом бокс остаётся закрытым: для открывания высоты не хватает.'
     : outside ? 'На открытой стоянке крышку можно открыть после парковки.'
       : `Открывание проходит с рабочим запасом ≥ ${OPENING_RESERVE * 1000} мм.`;
-  document.getElementById('roof-height').textContent = decimal(DIMENSIONS.height, 2);
-  document.getElementById('soffit-height').textContent = decimal(SOFFIT_CLEARANCE);
-  document.getElementById('clear-height').textContent = decimal(CANOPY_CLEARANCE);
-  document.getElementById('interior-height').textContent = decimal(INTERIOR.height);
+  document.getElementById('roof-height').textContent = decimal(roofHeight, 2);
+  document.getElementById('soffit-height').textContent = decimal(soffitClearance);
+  document.getElementById('clear-height').textContent = decimal(canopyClearance);
+  document.getElementById('interior-height').textContent = decimal(interiorHeight);
   document.getElementById('plan-result').textContent = `На всём маршруте: до препятствий ≥ ${Math.round(analysis.minObstacle * 100)} см, до края покрытия ≥ ${Math.round(analysis.minSurface * 100)} см. По эскизным размерам.`;
   updateAccess();
   updatePlayback();
@@ -347,8 +410,10 @@ dimension([0, 0.045, 9.65], [6, 0.045, 9.65], '6 м', [3, 0.1, 9.65], [0, 0, 0.1
 dimension([-0.5, 0.045, 1.1], [-0.5, 0.045, 9.1], '8 м', [-0.5, 0.1, 5.1], [0.12, 0, 0]);
 dimension([6.42, 0.045, 1.1], [6.42, 0.045, 5.1], 'Навес · 4 м', [6.42, 0.1, 3.1], [0.12, 0, 0]);
 dimension([6.42, 0.045, 5.1], [6.42, 0.045, 9.1], 'Хозблок · 4 м', [6.42, 0.1, 7.1], [0.12, 0, 0]);
-dimension([6.65, 0, 9.25], [6.65, DIMENSIONS.height, 9.25], `${decimal(DIMENSIONS.height, 2)} м`, [6.65, DIMENSIONS.height / 2, 9.25], [0.13, 0, 0]);
-dimension([6.28, 0, 1.5], [6.28, CANOPY_CLEARANCE, 1.5], `Мин. просвет · ${decimal(CANOPY_CLEARANCE)} м`, [6.28, CANOPY_CLEARANCE / 2, 1.5], [0, 0, 0.13]);
+const lowRoof = profile?.lowEdge ?? roofHeight;
+dimension([6.65, 0, 9.25], [6.65, lowRoof, 9.25], `${decimal(lowRoof, 2)} м`, [6.65, lowRoof / 2, 9.25], [0.13, 0, 0]);
+if (profile) dimension([6.65, 0, 0.95], [6.65, roofHeight, 0.95], `Верх · ${decimal(roofHeight, 2)} м`, [6.65, roofHeight / 2, 0.95], [0.13, 0, 0]);
+dimension([6.28, 0, 1.5], [6.28, canopyClearance, 1.5], `Просвет · ${decimal(canopyClearance)} м`, [6.28, canopyClearance / 2, 1.5], [0, 0, 0.13]);
 dimension([0, -0.04, 11.35], [11, -0.04, 11.35], 'Площадка · 11 м', [5.5, 0, 11.35], [0, 0, 0.12]);
 dimension([SITE.gateStart, 0.08, -0.6], [SITE.gateEnd, 0.08, -0.6], 'Въезд ≈ 5,1 м', [8.45, 0.1, -0.6], [0, 0, 0.14]);
 dimension([SITE.west, 0.08, -0.6], [SITE.gateStart, 0.08, -0.6], 'Забор · 7 м', [2.4, 0.1, -0.6], [0, 0, 0.14]);
@@ -384,7 +449,8 @@ function requestRender() {
       stepInside(forward, right, dt * 1.1);
     } else walkTick = 0;
     if (controls.enabled) controls.update();
-    renderer.render(scene, camera);
+    composer.render();
+    review?.update();
     if (dimensions.visible) positionLabels(dimensionLabels);
     if (!accessLabelsLayer.hidden) positionLabels(accessLabels);
     if (playing || walking) requestRender();
@@ -398,6 +464,7 @@ function markView(name) {
   });
 }
 const views = {
+  render: [1, 0.42, -0.42],
   perspective: [1.2, 0.8, -0.95],
   entrance: [0.65, 1.3, -1],
   front: [1, 0.24, 0],
@@ -410,15 +477,15 @@ function applyView(name) {
   const wholeSite = ['perspective', 'entrance', 'top'].includes(name);
   const closeView = name === 'clearance';
   controls.target.set(closeView ? 3.5 : wholeSite ? 5.9 : 4.1, closeView ? 1.55 : 0.55, closeView ? 2.6 : wholeSite ? 3.9 : 5.1);
-  const distance = (closeView ? 9 : 23) / Math.min(camera.aspect, 1.35);
+  const distance = (closeView ? 9 : name === 'render' ? 17 : 23) / Math.min(camera.aspect, 1.35);
   const direction = new THREE.Vector3(...views[name]).normalize();
   camera.position.copy(controls.target).add(direction.clone().multiplyScalar(distance));
   // Общие ракурсы включают улицу и место отката; фасадные приближают хозблок.
   const corners = [];
-  for (const x of closeView ? [0, 10.2] : wholeSite ? [-1.8, 17] : [-1.6, 11.6]) {
-    for (const z of closeView ? [0.9, 5.1] : wholeSite ? [-4.3, 12.1] : [-1.1, 12.1]) corners.push(new THREE.Vector3(x, -0.33, z));
+  for (const x of name === 'render' ? [-0.4, 7] : closeView ? [0, 10.2] : wholeSite ? [-1.8, 17] : [-1.6, 11.6]) {
+    for (const z of name === 'render' ? [0.8, 9.8] : closeView ? [0.9, 5.1] : wholeSite ? [-4.3, 12.1] : [-1.1, 12.1]) corners.push(new THREE.Vector3(x, -0.33, z));
   }
-  for (const x of [-0.15, 6.15]) for (const z of closeView ? [0.95, 5.1] : [0.95, 9.25]) corners.push(new THREE.Vector3(x, DIMENSIONS.height, z));
+  for (const x of [-0.15, 6.15]) for (const z of closeView ? [0.95, 5.1] : [0.95, 9.25]) corners.push(new THREE.Vector3(x, silhouetteHeight, z));
   if (wholeSite) {
     for (const [x, z] of [[SITE.west, 0], [SITE.eastEnd, 0], [SITE.west, SITE.southEnd]]) {
       corners.push(new THREE.Vector3(x, SITE.height, z));
@@ -537,7 +604,7 @@ function applyInsideView(name) {
     updateInsideCamera();
   }
   document.querySelectorAll('button[data-inside-view]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.insideView === name)));
-  document.getElementById('view-status').textContent = planMode ? 'Вся расстановка сверху. Потолок снят, стены условно понижены.' : `Осмотр изнутри. Уровень глаз 1,6 метра. Потолок ${decimal(INTERIOR.height)} метра.`;
+  document.getElementById('view-status').textContent = planMode ? 'Вся расстановка сверху. Потолок снят, стены условно понижены.' : `Осмотр изнутри. Уровень глаз 1,6 метра. Минимальный потолок ${decimal(interiorHeight)} метра.`;
   document.querySelector('.desktop-help').textContent = planMode ? 'Мышь — вращать · Колесо — масштаб · Правая кнопка — сдвиг' : 'Тяните — осмотреться · W A S D / стрелки — идти · Колесо — приблизить';
   document.querySelector('.touch-help').textContent = planMode ? 'Один палец — вращать · Два — масштаб и сдвиг' : 'Тяните — осмотреться · Кнопки со стрелками — идти';
   renderer.domElement.setAttribute('aria-label', planMode ? 'Расстановка интерьера сверху. Перетащите для вращения, колесо для масштаба.' : 'Осмотр внутри. Перетащите, чтобы оглядеться. W A S D или стрелки для перемещения. Home — исходная точка.');
@@ -553,16 +620,18 @@ function setMode(mode) {
   if (insideMode) history.replaceState(null, '', '#interior');
   else if (location.hash === '#interior') history.replaceState(null, '', location.pathname + location.search);
   interior.visible = insideMode;
-  for (const object of [building, site, slab, lawn, earth, street]) object.visible = !insideMode;
+  for (const object of [building, site, slab, lawn, earth, street, landscape]) object.visible = !insideMode;
   car.visible = !insideMode && routeSelect.value !== 'hidden';
   dimensions.visible = !insideMode && document.getElementById('dimensions').checked;
   labelsLayer.hidden = !dimensions.visible;
-  scene.background.set(insideMode ? '#eeede5' : '#e6e9e0');
-  skyLight.intensity = insideMode ? 1.1 : 1.9;
-  sun.intensity = insideMode ? 1.7 : 3.2;
-  renderer.toneMappingExposure = insideMode ? 0.86 : 0.98;
+  scene.background.set(insideMode ? '#d5d1c7' : '#b6bec1');
+  scene.fog = insideMode ? null : new THREE.Fog('#b6bec1', 32, 95);
+  skyLight.intensity = insideMode ? 0.65 : 1.1;
+  sun.intensity = insideMode ? 0.55 : 2.1;
+  renderer.toneMappingExposure = insideMode ? 0.95 : 1.05;
+  ambientOcclusion.kernelRadius = insideMode ? 5 : 6;
   document.querySelectorAll('button[data-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === mode)));
-  document.querySelector('.view-label').textContent = insideMode ? 'ИНТЕРЬЕР / ОСМОТР ПОМЕЩЕНИЯ' : 'MONJARO / ПРОВЕРКА ЗАЕЗДА';
+  document.querySelector('.view-label').textContent = insideMode ? 'ИНТЕРЬЕР / ОСМОТР ПОМЕЩЕНИЯ' : 'АРХИТЕКТУРНЫЙ ВИД / ПО РЕФЕРЕНСУ';
   host.setAttribute('aria-label', insideMode ? '3D-интерьер хозблока: деревянные стеллажи, ящики и садовый инвентарь' : '3D-сцена: хозблок с навесом, забором и анимацией заезда Geely Monjaro с боксом Sotra Volcano 750');
   if (insideMode) applyInsideView('passage');
   else {
@@ -576,7 +645,7 @@ function setMode(mode) {
     renderer.domElement.setAttribute('aria-label', '3D-модель. Перетащите для вращения, колесо для масштаба. Также доступны кнопки управления камерой.');
     document.querySelector('.desktop-help').textContent = 'Мышь — вращать · Колесо — масштаб · Правая кнопка — сдвиг';
     document.querySelector('.touch-help').textContent = 'Один палец — вращать · Два — масштаб и сдвиг';
-    applyView('perspective');
+    applyView('render');
   }
   updateAccess();
   renderer.domElement.focus({ preventScroll: true });
@@ -688,17 +757,72 @@ renderer.domElement.addEventListener('webglcontextlost', event => {
 
 document.querySelector('.specifications').open = false;
 rebuildManeuver();
+review = createReviewer({
+  canvas: renderer.domElement, camera, roots: { building, site, car, paving: slab, street, interior },
+  modelVersion: 'hozblock-wall-mowers-2026-10-18-v1', variant: monoRoof ? 'mono' : 'flat',
+  pause() { heldKeys.clear(); drag = null; pause(); }, requestRender,
+  getView() {
+    return {
+      variant: monoRoof ? 'mono' : 'flat', mode: insideMode ? 'inside' : 'outside', plan: planMode,
+      walker: { ...walker }, camera: { position: camera.position.toArray(), target: controls.target.toArray(), fov: camera.fov },
+      scene: { route: routeSelect.value, box: boxToggle.checked, mountLift: mountInput.valueAsNumber, time: elapsed,
+        lid: lidSelect.value, entrance: entranceOpen, roof: roof.visible, fascia: fascia?.visible ?? true,
+        dimensions: document.getElementById('dimensions').checked, routes: document.getElementById('access-routes').checked },
+    };
+  },
+  restoreView(view) {
+    const s = view.scene;
+    pause(); heldKeys.clear(); drag = null;
+    routeSelect.value = s.route; boxToggle.checked = s.box; mountInput.value = s.mountLift;
+    entranceOpen = s.entrance; rebuildManeuver(); seek(s.time);
+    if (!lidSelect.disabled) { lidSelect.value = s.lid; setRoofBoxOpening(car, s.lid); }
+    document.getElementById('roof-cutaway').checked = !s.roof; roof.visible = s.roof;
+    document.getElementById('fascia-cutaway').checked = !s.fascia;
+    if (fascia) fascia.visible = s.fascia;
+    document.getElementById('dimensions').checked = s.dimensions;
+    document.getElementById('access-routes').checked = s.routes;
+    setMode(view.mode);
+    if (view.mode === 'inside') {
+      if (view.plan) applyInsideView('plan');
+      else if (!canStandInside(view.walker.x, view.walker.z)) { applyInsideView('plan'); return false; }
+      else {
+        walker = { ...view.walker }; camera.fov = view.camera.fov; camera.updateProjectionMatrix();
+        updateInsideCamera(); updatePlayback(); return true;
+      }
+    }
+    const damping = controls.enableDamping;
+    controls.enableDamping = false;
+    camera.position.fromArray(view.camera.position); controls.target.fromArray(view.camera.target);
+    camera.fov = view.camera.fov; camera.updateProjectionMatrix(); controls.update();
+    controls.enableDamping = damping; markView('custom'); updatePlayback(); requestRender();
+    return true;
+  },
+  capturePreview(point) {
+    composer.render();
+    const preview = document.createElement('canvas');
+    preview.width = Math.min(640, renderer.domElement.width);
+    preview.height = Math.round(preview.width * renderer.domElement.height / renderer.domElement.width);
+    const ctx = preview.getContext('2d');
+    ctx.drawImage(renderer.domElement, 0, 0, preview.width, preview.height);
+    const p = point.clone().project(camera), x = (p.x + 1) * preview.width / 2, y = (1 - p.y) * preview.height / 2;
+    ctx.fillStyle = '#277bb6'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    return preview.toDataURL('image/jpeg', 0.78);
+  },
+});
 let fitted = false;
 new ResizeObserver(() => {
   if (!host.clientWidth || !host.clientHeight) return;
   camera.aspect = host.clientWidth / host.clientHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(host.clientWidth, host.clientHeight);
+  composer.setSize(host.clientWidth, host.clientHeight);
   if (!fitted) {
     fitted = true;
-    applyView('perspective');
+    applyView('render');
     controls.saveState();
     if (location.hash === '#interior') setMode('inside');
+    review?.ready();
   }
   else if (insideMode) {
     if (planMode) applyInsideView('plan');

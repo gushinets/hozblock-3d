@@ -14,6 +14,24 @@
   <aside id="model-settings" class="sidebar" aria-label="Описание модели и настройки">
     <div class="wordmark"><span class="mark" aria-hidden="true">⌑</span> УЧАСТОК <span class="edition">01 / 3D</span></div>
     <div class="project-heading"><p class="eyebrow">ХОЗЯЙСТВЕННАЯ ЗОНА</p><h1>Хозблок<br> с навесом<span class="title-dot">.</span></h1><p class="intro">Снаружи и изнутри.<br>По плану и исходным картинкам.</p></div>
+    <nav class="roof-choice" aria-label="Вариант кровли">
+      <a id="roof-flat-link" href="./">Плоская</a>
+      <a id="roof-mono-link" href="?roof=mono">Скрытый скат · 3%</a>
+    </nav>
+    <section id="roof-profile-panel" class="interior-panel" hidden>
+      <h2>Плоский силуэт, скат внутри</h2>
+      <label id="fascia-row" class="switch-row" for="fascia-cutaway" hidden><span>Скрыть фальшпанель</span><input id="fascia-cutaway" type="checkbox" role="switch"><span class="switch" aria-hidden="true"></span></label>
+      <dl class="metrics">
+        <div><dt>Уклон к задней стене</dt><dd>3% · 1,72°</dd></div>
+        <div><dt>Верхний край</dt><dd>2,79 <small>м</small></dd></div>
+        <div><dt>Низкий край</dt><dd>2,54 <small>м</small></dd></div>
+        <div><dt>Минимум внутри</dt><dd>2,30 <small>м</small></dd></div>
+        <div><dt>Верх фальшпанели</dt><dd>2,86 <small>м</small></dd></div>
+      </dl>
+      <p>Предварительный вариант под мембранное или рулонное покрытие. Перепад на 8 м — 24 см. Принята конструкция 22 см и подшивка 2,5 см.</p>
+      <p>Жёлоб по низкому краю собирает воду к трубе справа. Показан уход в закрытый подземный отвод. Его маршрут и подключение к ливневке или ёмкости ещё не выбраны.</p>
+      <p>Горизонтальный верх фальшпанели скрывает уклон. Над навесом её нижняя кромка выше, чтобы сохранить проезд с боксом. Переключатель выше позволяет убрать облицовку и осмотреть скат.</p>
+    </section>
     <details class="specifications" open>
       <summary>Параметры проекта <span aria-hidden="true">−</span></summary>
       <dl class="metrics">
@@ -25,7 +43,7 @@
         <div><dt>До светильников</dt><dd><span id="clear-height">2,436</span> <small>м</small></dd></div>
         <div><dt>Площадка</dt><dd>11 × 11 <small>м</small></dd></div>
       </dl>
-      <div class="finish"><span><i class="swatch light"></i>Светлая обшивка</span><span><i class="swatch dark"></i>Антрацит</span></div>
+      <div class="finish"><span><i class="swatch light"></i>Светлая штукатурка</span><span><i class="swatch dark"></i>Графит</span></div>
     </details>
     <section class="interior-panel" data-interior aria-label="Описание интерьера">
       <h2>Внутри хозблока</h2>
@@ -64,23 +82,52 @@
       <input id="mount-lift" type="number" min="0" max="200" step="1" value="60" required aria-describedby="mount-note">
       <p id="mount-note">60 мм — допущение: прибавка от паспортной высоты Monjaro до низа бокса. Уточните общую высоту установленного бокса от земли: она должна совпасть с расчётом.</p>
       <p>Улица 4 м и габарит по зеркалам 2,2 м — допущения. Радиус внешнего колеса ≈ 6,14 м, не меньше паспортных 5,9 м. Геометрический запас уменьшен на 2 см.</p>
-      <p>Верх общей кровли — 2,70 м. Под подшивкой и внутри до потолка — 2,455 м, под светильниками навеса — 2,436 м. При прибавке крепления 60 мм высота машины с закрытым боксом — 2,199 м, запас — 237 мм. Толщина конструкций пока условная. Скрытие кровли влияет только на изображение.</p>
+      <p id="roof-clearance-note">Верх общей кровли — 2,70 м. Под подшивкой и внутри до потолка — 2,455 м, под светильниками навеса — 2,436 м. При прибавке крепления 60 мм высота машины с закрытым боксом — 2,199 м, запас — 237 мм. Толщина конструкций пока условная. Скрытие кровли влияет только на изображение.</p>
       <p id="lid-note">При этой высоте под навесом бокс остаётся закрытым. Двустороннее открывание доступно на открытой стоянке после парковки; показано схематично до 90°. Точная кинематика Sotra не подтверждена: проверяем верх закрытого бокса + ширину 0,93 м и рабочий зазор 150 мм. Для точного габарита нужен замер механизма.</p>
       <p class="source-links"><a href="https://global.geely.com/en/models/monjaro" target="_blank" rel="noreferrer">Geely</a> · <a href="https://sotra-rus.ru/catalog/avtomobilnye-boksy/" target="_blank" rel="noreferrer">Sotra</a> · <a href="https://www.canotomotiv.com.tr/turtle-air-2" target="_blank" rel="noreferrer">Turtle</a></p>
     </details>
     <div class="sidebar-foot"><span class="status-dot" aria-hidden="true"></span> Модель по эскизу <span class="version">v.05</span></div>
   </aside>
 
+  <section id="review-panel" class="review-panel" aria-label="Замечания архитектора" hidden>
+    <div class="review-heading"><h2>Замечания архитектора</h2><button id="review-close" type="button" aria-label="Закрыть замечания">×</button></div>
+    <p>Выберите ракурс, нажмите «Добавить метку» и укажите элемент на модели.</p>
+    <button id="review-add" class="review-primary" type="button">Добавить метку</button>
+    <div class="review-file-actions"><button id="review-export" type="button" disabled>Скачать замечания</button><button id="review-import" type="button">Загрузить файл</button></div>
+    <input id="review-file" type="file" accept=".json,application/json" hidden>
+    <p class="review-local-note">Сохранение в этом браузере. Для передачи архитектору или заказчику скачайте файл. Облачной синхронизации нет.</p>
+    <p id="review-message" role="status" aria-live="polite"></p>
+    <button id="review-undo" type="button" hidden>Отменить удаление</button>
+    <ol id="review-list" class="review-list"></ol>
+    <p id="review-empty">Замечаний пока нет.</p>
+  </section>
+
+  <dialog id="review-editor" aria-labelledby="review-editor-title">
+    <form id="review-form">
+      <h2 id="review-editor-title">Новое замечание</h2>
+      <p id="review-element"></p>
+      <label for="review-author">Ваше имя <small>необязательно</small></label>
+      <input id="review-author" type="text" maxlength="80" autocomplete="name">
+      <label for="review-text">Замечание</label>
+      <textarea id="review-text" rows="5" maxlength="3000" required placeholder="Что нужно уточнить или изменить?"></textarea>
+      <p id="review-editor-error" role="alert"></p>
+      <div class="review-editor-actions"><button id="review-cancel" type="button">Отмена</button><button class="review-primary" type="submit">Сохранить</button></div>
+    </form>
+  </dialog>
+
   <main id="viewer" aria-label="Просмотр трёхмерной модели">
-    <header class="viewer-header"><span class="view-label">MONJARO / ПРОВЕРКА ЗАЕЗДА</span><a class="settings-link" href="#model-settings">Параметры ↓</a><span class="live-label"><span aria-hidden="true"></span>Интерактивная модель</span></header>
+    <header class="viewer-header"><span class="view-label">АРХИТЕКТУРНЫЙ ВИД / ПО РЕФЕРЕНСУ</span><a class="settings-link" href="#model-settings">Параметры ↓</a><span class="live-label"><span aria-hidden="true"></span>Интерактивная модель</span></header>
     <div class="mode-switch" role="group" aria-label="Режим осмотра">
       <button type="button" data-mode="outside" aria-pressed="true">Снаружи</button>
       <button type="button" data-mode="inside" aria-pressed="false">Внутри</button>
     </div>
+    <button id="review-toggle" class="review-toggle" type="button" aria-controls="review-panel" aria-expanded="false">✎ Замечания <span id="review-count">0</span></button>
+    <div id="review-pick-hint" class="review-pick-hint" hidden><span>Нажмите на элемент модели для замечания</span><button id="review-pick-cancel" type="button">Отмена</button></div>
     <div id="scene" role="region" aria-label="3D-сцена: хозблок с навесом, забором и анимацией заезда Geely Monjaro с боксом Sotra Volcano 750">
       <div id="loading" role="status">Подготавливаем модель…</div>
       <div id="dimension-labels" aria-hidden="true"></div>
       <div id="access-labels" aria-hidden="true"></div>
+      <div id="review-markers" aria-label="Метки замечаний"></div>
     </div>
     <div class="playback" data-exterior role="group" aria-label="Анимация заезда">
       <div class="playback-top"><span id="drive-gear" class="gear" aria-label="Передача D">D</span><span id="drive-stage">Улица</span><output id="drive-time" for="drive-progress">0,0 / 23,6 с</output></div>
@@ -88,7 +135,8 @@
       <p id="drive-note">Оливковый — вперёд · песочный — задний ход</p>
     </div>
     <div class="view-presets" data-exterior role="group" aria-label="Ракурсы модели">
-      <button type="button" data-view="perspective" aria-pressed="true">Общий вид</button>
+      <button type="button" data-view="render" aria-pressed="true">Архитектурный вид</button>
+      <button type="button" data-view="perspective" aria-pressed="false">Общий вид</button>
       <button type="button" data-view="entrance" aria-pressed="false">Въезд</button>
       <button type="button" data-view="front" aria-pressed="false">Ворота хозблока</button>
       <button type="button" data-view="top" aria-pressed="false">Сверху</button>

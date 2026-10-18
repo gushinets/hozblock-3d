@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { createRoofProfile, applyBuildingRoof } from './roof-variant.js';
 
 // Метры. X — вправо на плане, Z — вниз на плане, Y — высота.
 export const DIMENSIONS = Object.freeze({
@@ -34,8 +36,8 @@ export function createSite() {
   const entranceGate = new THREE.Group();
   entranceGate.name = 'Откатные въездные ворота';
   site.add(fence, entranceGate);
-  const panel = new THREE.MeshStandardMaterial({ color: '#424c49', roughness: 0.8, metalness: 0.2 });
-  const frame = new THREE.MeshStandardMaterial({ color: '#293532', roughness: 0.65, metalness: 0.35 });
+  const panel = new THREE.MeshStandardMaterial({ color: '#c9c6bd', roughness: 0.94 });
+  const frame = new THREE.MeshStandardMaterial({ color: '#292e31', roughness: 0.55, metalness: 0.2 });
   function box(name, size, position, material = panel, parent = fence) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material);
     mesh.name = name;
@@ -59,7 +61,8 @@ export function createSite() {
       const z = z1 + (z2 - z1) * i / count;
       const key = `${x},${z}`;
       if (!posts.has(key)) {
-        box('Столб забора', [0.16, SITE.height + 0.16, 0.16], [x, (SITE.height - 0.16) / 2, z], frame);
+        box('Столб забора', [0.16, SITE.height + 0.16, 0.16], [x, (SITE.height - 0.16) / 2, z], panel);
+        box('Колпак столба', [0.16, 0.04, 0.16], [x, SITE.height + 0.02, z], frame);
         posts.add(key);
       }
       if (i === count) continue;
@@ -67,6 +70,7 @@ export function createSite() {
       const centerZ = z + (z2 - z1) / count / 2;
       const span = length / count - 0.12;
       box('Секция забора', alongX ? [span, 1.8, 0.06] : [0.06, 1.8, span], [centerX, 1, centerZ]);
+      box('Тёмный цоколь забора', alongX ? [span, 0.24, 0.07] : [0.07, 0.24, span], [centerX, 0.12, centerZ], frame);
       for (const y of [0.15, 1.87]) {
         box('Ригель забора', alongX ? [span, 0.035, 0.085] : [0.085, 0.035, span], [centerX, y, centerZ], frame);
       }
@@ -74,7 +78,11 @@ export function createSite() {
   }
   const gateWidth = SITE.gateEnd - SITE.gateStart + 0.1;
   const center = (SITE.gateStart + SITE.gateEnd) / 2;
-  box('Полотно въездных ворот', [gateWidth, 1.8, 0.06], [center, 1, -0.18], panel, entranceGate);
+  box('Полотно въездных ворот', [gateWidth, 1.8, 0.06], [center, 1, -0.18], frame, entranceGate);
+  const gateJoint = new THREE.MeshStandardMaterial({ color: '#171c1f', roughness: 0.85 });
+  for (let y = 0.25; y < 1.9; y += 0.12) {
+    box('Горизонтальный шов ворот', [gateWidth - 0.04, 0.009, 0.003], [center, y, -0.212], gateJoint, entranceGate);
+  }
   for (const y of [0.1, 1.96]) {
     box('Рама въездных ворот', [gateWidth + 0.08, 0.08, 0.09], [center, y, -0.18], frame, entranceGate);
   }
@@ -93,7 +101,7 @@ export function setEntranceOpen(entranceGate, open) {
   entranceGate.updateMatrixWorld(true);
 }
 
-export function createModel(overrides = {}) {
+export function createModel(overrides = {}, roofSpec = null) {
   const d = DIMENSIONS;
   const materials = {
     wall: new THREE.MeshStandardMaterial({ color: '#f4f1e8', roughness: 0.85 }),
@@ -167,6 +175,19 @@ export function createModel(overrides = {}) {
   box('Боковая дверь', [d.doorWidth - 0.035, 1.88, 0.045], [1.55, 0.95, end + 0.006], materials.dark);
   box('Ручка боковой двери', [0.12, 0.025, 0.07], [1.84, 0.95, end + 0.045], materials.dark);
   box('Цоколь', [6, 0.07, 4], [3, -0.035, start + 2], materials.concrete);
+  // Тонкая наружная отделка не меняет дверные проёмы и габариты помещения.
+  box('Графитовый цоколь западной стены', [0.008, 0.22, 4], [-0.004, 0.11, start + 2], materials.dark);
+  box('Графитовый цоколь общей стены', [6, 0.22, 0.008], [3, 0.11, start - 0.004], materials.dark);
+  for (const z of [start + pier / 2, end - pier / 2]) {
+    box('Графитовый цоколь у ворот', [0.008, 0.22, pier], [6.004, 0.11, z], materials.dark);
+  }
+  for (const [x, width] of [[d.doorOffset / 2, d.doorOffset], [(d.doorOffset + d.doorWidth + 6) / 2, 6 - d.doorOffset - d.doorWidth]]) {
+    box('Графитовый цоколь у двери', [width, 0.22, 0.008], [x, 0.11, end + 0.004], materials.dark);
+  }
+  for (const z of [start + pier - 0.02, end - pier + 0.02]) {
+    box('Обрамление ворот', [0.025, d.gateHeight + 0.06, 0.045], [6.025, d.gateHeight / 2, z], materials.dark);
+  }
+  box('Обрамление перемычки ворот', [0.025, 0.045, d.gateWidth + 0.08], [6.025, d.gateHeight + 0.02, start + 2], materials.dark);
 
   const roof = new THREE.Group();
   roof.name = 'Общая кровля';
@@ -195,8 +216,10 @@ export function createModel(overrides = {}) {
       building.add(lamp);
     }
   }
+  const profile = roofSpec ? createRoofProfile(d, roofSpec) : null;
+  if (profile) applyBuildingRoof(building, shell, roof, profile, d);
   building.updateMatrixWorld(true);
-  return { building, shell, roof };
+  return { building, shell, roof, profile };
 }
 
 export function createCar({ box: withBox = true, mountLift = VEHICLE.mountLift } = {}) {
@@ -205,13 +228,13 @@ export function createCar({ box: withBox = true, mountLift = VEHICLE.mountLift }
   const body = new THREE.Group();
   body.name = 'Кузов Monjaro';
   car.add(body);
-  const paint = new THREE.MeshStandardMaterial({ color: '#42535b', metalness: 0.65, roughness: 0.3 });
+  const paint = new THREE.MeshPhysicalMaterial({ color: '#42535b', metalness: 0.6, roughness: 0.27, clearcoat: 0.8, clearcoatRoughness: 0.18 });
   const glass = new THREE.MeshStandardMaterial({ color: '#182b32', metalness: 0.3, roughness: 0.16 });
   const rubber = new THREE.MeshStandardMaterial({ color: '#202222', roughness: 0.95 });
   const metal = new THREE.MeshStandardMaterial({ color: '#b5bab9', metalness: 0.85, roughness: 0.25 });
   const lights = new THREE.MeshStandardMaterial({ color: '#e2eee9', emissive: '#c7dddf', emissiveIntensity: 0.25 });
   function box(size, position, material, parent = body) {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material);
+    const mesh = new THREE.Mesh(new RoundedBoxGeometry(...size, 2, Math.min(0.025, Math.min(...size) * 0.18)), material);
     mesh.position.set(...position);
     mesh.castShadow = mesh.receiveShadow = true;
     parent.add(mesh);
@@ -277,6 +300,11 @@ export function createCar({ box: withBox = true, mountLift = VEHICLE.mountLift }
     box([0.22, 0.1, 0.13], [0.73, 1.22, side * 1.035], paint);
     box([0.025, 0.1, 0.30], [-2.37, 0.88, side * 0.64], new THREE.MeshStandardMaterial({ color: '#873b35' }));
     for (const x of [-0.8, 0.5]) box([0.15, 0.025, 0.022], [x, 1.0, side * 0.934], metal);
+    const seams = [];
+    for (const x of [-1.05, -0.35, 1.05]) seams.push(new THREE.Vector3(x, 0.49, side * 0.947), new THREE.Vector3(x, 1.035, side * 0.947));
+    const doorLines = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(seams),
+      new THREE.LineBasicMaterial({ color: '#222c31', transparent: true, opacity: 0.6 }));
+    body.add(doorLines);
   }
   const rack = new THREE.Group();
   rack.name = 'Turtle Air 2 · установочная прибавка уточняется';
@@ -383,8 +411,19 @@ export function collisionBoxes(...groups) {
     group.traverse(mesh => {
       if (!mesh.isMesh) return;
       const bounds = new THREE.Box3().setFromObject(mesh);
-      boxes.push({ name: mesh.name, minX: bounds.min.x, maxX: bounds.max.x, minZ: bounds.min.z, maxZ: bounds.max.z,
-        minY: bounds.min.y, maxY: bounds.max.y });
+      const box = { name: mesh.name, minX: bounds.min.x, maxX: bounds.max.x, minZ: bounds.min.z, maxZ: bounds.max.z,
+        minY: bounds.min.y, maxY: bounds.max.y };
+      if (mesh.userData.roofSlope) {
+        // Локальные полосы не переносят низкий задний край на высокую часть над машиной.
+        const count = Math.ceil((box.maxZ - box.minZ) / 0.125);
+        for (let i = 0; i < count; i++) {
+          const minZ = box.minZ + (box.maxZ - box.minZ) * i / count;
+          const maxZ = box.minZ + (box.maxZ - box.minZ) * (i + 1) / count;
+          boxes.push({ ...box, minZ, maxZ,
+            minY: box.minY + mesh.userData.roofSlope * (box.maxZ - maxZ),
+            maxY: box.maxY - mesh.userData.roofSlope * (minZ - box.minZ) });
+        }
+      } else boxes.push(box);
     });
   }
   return boxes;

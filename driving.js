@@ -125,8 +125,9 @@ export function roofBoxOpeningEnvelope(pose, mountLift = v.mountLift) {
   };
 }
 
-export function analyzeManeuver(poses, obstacles, { box = true, mountLift = v.mountLift, mirrors = v.mirrors } = {}) {
-  if (!Number.isFinite(mountLift) || mountLift < 0 || mountLift > 0.2 || !Number.isFinite(mirrors) || mirrors < v.width || mirrors > 3) {
+export function analyzeManeuver(poses, obstacles, { box = true, mountLift = v.mountLift, mirrors = v.mirrors, canopyClearance = CANOPY_CLEARANCE } = {}) {
+  if (!Number.isFinite(mountLift) || mountLift < 0 || mountLift > 0.2 || !Number.isFinite(mirrors) || mirrors < v.width || mirrors > 3
+    || !Number.isFinite(canopyClearance) || canopyClearance <= 0) {
     throw new Error('Некорректные габариты автомобиля или крепления');
   }
   const lowObstacles = obstacles.filter(o => o.maxY > 0.21 && o.minY < v.height);
@@ -157,9 +158,9 @@ export function analyzeManeuver(poses, obstacles, { box = true, mountLift = v.mo
   return {
     firstPlan, firstHeight, heightObject,
     minObstacle: Math.max(0, minObstacle - 0.02), minSurface: minSurface - 0.02,
-    totalHeight: loadTop, clearance: CANOPY_CLEARANCE - loadTop,
+    totalHeight: loadTop, clearance: canopyClearance - loadTop,
     openingHeight: opening?.maxY ?? null,
-    openingClearance: opening ? CANOPY_CLEARANCE - opening.maxY : null,
+    openingClearance: opening ? canopyClearance - opening.maxY : null,
     openingCollision,
     duration: poses.at(-1).time,
   };
