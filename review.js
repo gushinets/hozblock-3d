@@ -58,7 +58,7 @@ export function createReviewer({ canvas, camera, roots, modelVersion, variant, g
     setPicking(false);
     if (c.view.variant !== variant) {
       const url = new URL(location.href);
-      if (c.view.variant === 'mono') url.searchParams.set('roof', 'mono'); else url.searchParams.delete('roof');
+      url.searchParams.set('roof', c.view.variant);
       url.searchParams.set('review', c.id);
       url.hash = c.view.mode === 'inside' ? 'interior' : '';
       if (!persist()) { openPanel(true); message('Перед сменой кровли скачайте замечания: браузер не смог сохранить их автоматически.', true); return; }

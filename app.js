@@ -116,7 +116,7 @@ surfaceGrain.colorSpace = THREE.NoColorSpace;
 surfaceGrain.repeat.set(6, 6);
 const wallMaterial = new THREE.MeshStandardMaterial({ map: siding, bumpMap: surfaceGrain, bumpScale: 0.004, roughness: 0.94 });
 const soffitMaterial = new THREE.MeshStandardMaterial({ color: '#b6b1a4', bumpMap: surfaceGrain, bumpScale: 0.002, roughness: 0.85 });
-const monoRoof = new URLSearchParams(location.search).get('roof') === 'mono';
+const monoRoof = new URLSearchParams(location.search).get('roof') !== 'flat';
 const { building, roof, profile } = createModel({ wall: wallMaterial, soffit: soffitMaterial,
   dark: new THREE.MeshStandardMaterial({ color: '#252a2c', metalness: 0.3, roughness: 0.4, bumpMap: surfaceGrain, bumpScale: 0.001 }),
   roof: new THREE.MeshStandardMaterial({ color: '#555a59', roughness: 0.88, bumpMap: surfaceGrain, bumpScale: 0.0015 }) },
@@ -133,7 +133,7 @@ const interiorHeight = profile?.minClearHeight ?? INTERIOR.height;
 const roofHeight = profile?.highEdge ?? DIMENSIONS.height;
 const silhouetteHeight = profile?.screenTop ?? roofHeight;
 document.getElementById('roof-profile-panel').hidden = !monoRoof;
-document.getElementById(monoRoof ? 'roof-mono-link' : 'roof-flat-link').setAttribute('aria-current', 'page');
+if (monoRoof) document.getElementById('roof-mono-link').setAttribute('aria-current', 'page');
 if (profile) {
   document.title = 'Скрытый скат — хозблок с навесом';
   document.getElementById('roof-clearance-note').textContent = 'Эскиз: уклон 3% от навеса к задней стене, под мембранное или рулонное покрытие. Верхний край 2,79 м, низкий 2,54 м; чистый потолок внутри от 2,30 до 2,42 м. Расчётный просвет навеса с резервом на светильники — 2,401 м. Толщина конструкции условная. Скрытие кровли влияет только на изображение.';
