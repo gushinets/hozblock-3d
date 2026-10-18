@@ -7,6 +7,15 @@ const output = new URL('../dist/', import.meta.url);
 const html = await readFile(new URL('index.html', output), 'utf8');
 const imports = JSON.parse(html.match(/<script type="importmap">(.*?)<\/script>/s)[1]).imports;
 
+test('Обновление сайта меняет адреса стилей и модулей, обходя старый кеш', async () => {
+  const version = html.match(/styles\.css\?v=([a-f0-9]{12})/)[1];
+  assert.ok(html.includes(`app.js?v=${version}`));
+  const app = await readFile(new URL('app.js', output), 'utf8');
+  const modules = [...app.matchAll(/from\s*['"]([^'"]+)['"]/g)].map(match => match[1]).filter(path => path.startsWith('.'));
+  assert.ok(modules.length > 3);
+  assert.ok(modules.every(path => path.endsWith(`.js?v=${version}`)));
+});
+
 test('Сборка загружает весь граф модулей в подпапке GitHub Pages', async () => {
   for (const name of ['hozblock-3d', 'another-repository']) {
     const base = new URL(`https://example.test/${name}/`);
